@@ -1,0 +1,26 @@
+name: argus
+channels:
+  - anaconda
+  - free
+  - conda-forge
+dependencies:
+  - python=3.6.2
+  - pip
+  - wxpython
+  - git
+  - ffmpeg
+  - pandas
+  - numpy
+  - six=1.12
+  - tk=8.5.18
+  - libffi
+
+  - pip:
+    - argus==0.0.11
+    - imageio
+    - imageio-ffmpeg
+    - opencv-contrib-python==3.4.5.20
+    - pyglet
+    - sba==1.6.8pypi
+    - git+https://github.com/kilmoretrout/argus_gui.git@dev_fixalign
+
