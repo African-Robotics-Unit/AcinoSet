@@ -1,3 +1,5 @@
+These files are bloated with many packages that are possibly unnecessary - need to refine!
+
 If you encounter PackageNotFound errors from the .yml files when creating the envs, you can omit the platform-specific build constraints from the env definition export
 
 ```sh
