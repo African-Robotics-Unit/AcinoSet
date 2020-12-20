@@ -18,10 +18,12 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 ## 2D --> 3D Data Pipeline
 
 ### What we provide: 
-- 8,522 ground truth 2D frames
-- 119,490 processed frames with 2D keypoint estimation outputs (H5 files, as in the DLC format)
-- 3D files that are processed using our FTE baseline model. These can be used for 3D GT.
-- A tool to inspect the 3D dataset, which can be found [here](https://github.com/African-Robotics-Unit/acinonet_viewer)
+- 8,522 [ground truth 2D frames](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AACvUBuloEvAUFJFYZ9IqtbLa/data/hand_labeled_data?dl=0&subfolder_nav_tracking=1)
+- 119,490 processed frames with 2D keypoint estimation outputs [(H5 files as in the DLC format, and raw video)](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1) 
+    - this is currently organized by date > animal ID > "run/attempt"
+- [3D files that are processed using our FTE baseline model](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1). These can be used for 3D GT.
+   - these files are called `traj_opt.pickle`, have a related `scene_sba.json` file, and can be loaded in the GUI.
+- A GUI to inspect the 3D dataset, which can be found [here](https://github.com/African-Robotics-Unit/acinonet_viewer)
 
 
 The following sections document how this was created by the code within this repo:
