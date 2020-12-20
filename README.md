@@ -3,7 +3,7 @@
 Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Alexander Mathis, Mackenzie W. Mathis, Amir Patel 
 
 
- AcinoSet is a dataset of 13 free-running cheetahs in the wild that contains 119,490 frames of multi-view synchronized high-speed video footage, camera calibration files and 8,522 human-annotated frames. We utilize markerless animal pose estimation with DeepLabCut to provide 3D trajectories. Here, we use three methods that can serve as strong baselines for 3D pose estimation tool development: traditional sparse bundle adjustment, an Extended Kalman Filter, and a trajectory optimization-based method we call Full Trajectory Estimation. We believe this dataset will be useful for a diverse range of fields such as ecology, robotics, biomechanics as well as computer vision.
+ AcinoSet is a dataset of 13 free-running cheetahs in the wild that contains 119,490 frames of multi-view synchronized high-speed video footage, camera calibration files and 8,522 human-annotated frames. We utilize markerless animal pose estimation with DeepLabCut to provide 2P keypoints. Then we use three methods that can serve as strong baselines for 3D pose estimation tool development: traditional sparse bundle adjustment, an Extended Kalman Filter, and a trajectory optimization-based method we call Full Trajectory Estimation. We believe this dataset will be useful benchmark for a diverse range of fields such as ecology, robotics, biomechanics as well as computer vision.
 
 ### AcinoSet code by:
 - [Naoya Muramatsu](https://github.com/DenDen047)
@@ -15,7 +15,7 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 
 - Python3, anaconda, code dependencies are within conda env files.
 
-## 2D --> 3D Data Pipeline
+## 2D --> 3D Data Pipeline:
 
 ### What we provide: 
 - 8,522 [ground truth 2D frames](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AACvUBuloEvAUFJFYZ9IqtbLa/data/hand_labeled_data?dl=0&subfolder_nav_tracking=1)
@@ -30,8 +30,8 @@ The following sections document how this was created by the code within this rep
 
 #### Pre-trained DeepLabCut Model:
 
-- [ ] #coming soon. You can use the `full_cheetah` model provided in the [DLC Model Zoo](http://modelzoo.deeplabcut.org)  To re-create the H5 files (or on new videos). 
-- [X] H5 Outputs of all frames are provided [here]().
+- [ ] You can use the `full_cheetah` model provided in the [DLC Model Zoo](http://modelzoo.deeplabcut.org)  To re-create the H5 files (or on new videos). 
+- [X] Here, we also already provide the videos and H5 outputs of all frames, [here]().
 
 ##### Labelling Cheetah Body Positions:
 
