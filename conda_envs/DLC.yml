@@ -1,0 +1,13 @@
+#from https://github.com/DeepLabCut/DeepLabCut/blob/master/conda-environments/DLC-CPU.yaml
+
+name: DLC
+dependencies:
+  - python=3.7
+  - pip
+  - jupyter
+  - nb_conda
+  - tensorflow==1.13.1
+  - wxpython<4.1.0
+  - pip:
+    - deeplabcut
+
