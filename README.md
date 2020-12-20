@@ -13,7 +13,7 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 
 ## Prerequisites
 
-- Python3
+- Python3, anaconda, code dependencies are within conda env files.
 
 ## 2D --> 3D Data Pipeline
 
