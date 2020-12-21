@@ -3,7 +3,7 @@
 Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Alexander Mathis, Mackenzie W. Mathis, Amir Patel 
 
 
- AcinoSet is a dataset of 13 free-running cheetahs in the wild that contains 119,490 frames of multi-view synchronized high-speed video footage, camera calibration files and 8,522 human-annotated frames. We utilize markerless animal pose estimation with DeepLabCut to provide 2P keypoints. Then we use three methods that can serve as strong baselines for 3D pose estimation tool development: traditional sparse bundle adjustment, an Extended Kalman Filter, and a trajectory optimization-based method we call Full Trajectory Estimation. We believe this dataset will be useful benchmark for a diverse range of fields such as ecology, robotics, biomechanics as well as computer vision.
+ AcinoSet is a dataset of free-running cheetahs in the wild that contains 119,490 frames of multi-view synchronized high-speed video footage, camera calibration files and 8,522 human-annotated frames. We utilize markerless animal pose estimation with DeepLabCut to provide 2D keypoints (in the 119K frames). Then, we use three methods that serve as strong baselines for 3D pose estimation tool development: traditional sparse bundle adjustment, an Extended Kalman Filter, and a trajectory optimization-based method we call Full Trajectory Estimation. The resulting 3D trajectories, human-checked 3D ground truth, and an interactive tool to inspect the data is also provided. We believe this dataset will be useful for a diverse range of fields such as ecology, robotics, biomechanics, as well as computer vision.
 
 ### AcinoSet code by:
 - [Naoya Muramatsu](https://github.com/DenDen047) | [Daniel Joska](https://github.com/DJoska) | [Liam Clark](https://github.com/LiamClarkZA) | [Ricky Jericevich](https://github.com/@rickyjericevich)
@@ -20,7 +20,7 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
     - this is currently organized by date > animal ID > "run/attempt"
 - [3D files that are processed using our FTE baseline model](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1). These can be used for 3D GT.
    - these files are called `traj_opt.pickle`, have a related `scene_sba.json` file, and can be loaded in the GUI.
-- A GUI to inspect the 3D dataset, which can be found [here](https://github.com/African-Robotics-Unit/acinonet_viewer)
+- A GUI to inspect the 3D dataset, which can be found [here](https://github.com/African-Robotics-Unit/acinoset_viewer)
 
 
 The following sections document how this was created by the code within this repo:
@@ -28,7 +28,7 @@ The following sections document how this was created by the code within this rep
 #### Pre-trained DeepLabCut Model:
 
 - [ ] You can use the `full_cheetah` model provided in the [DLC Model Zoo](http://modelzoo.deeplabcut.org)  To re-create the H5 files (or on new videos). 
-- [X] Here, we also already provide the videos and H5 outputs of all frames, [here]().
+- Here, we also already provide the videos and H5 outputs of all frames, [here]().
 
 ##### Labelling Cheetah Body Positions:
 
