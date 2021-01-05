@@ -98,4 +98,5 @@ $ python full_traj_opt.py \
     --scene_file ../data/2019_03_09/extrinsic_calib/scene_sba.json
 ```
 
-If you want to view the 3D animation, run `full_traj_optimisation.ipynb` and follow the instructions!
+If you want to view the 3D animation, run `FTE.ipynb` and follow the instructions!
+
