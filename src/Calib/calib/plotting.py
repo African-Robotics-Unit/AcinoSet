@@ -82,7 +82,7 @@ def create_camera(color=(0.1, 0.1, 0.1, 1)):
     colors[[42,43]] = (0., 1., 0., 1)
     colors[[44,45]] = (0., 0., 1., 1)
 
-    mesh = gl.GLLinePlotItem(pos=verts[edges], color=colors, width=1.0, antialias=True, mode='lines')
+    mesh = gl.GLLinePlotItem(pos=verts[edges], color=colors, width=1, antialias=True, mode='lines')
     return mesh
 
 
@@ -146,19 +146,39 @@ def plot_calib_board(img_points, board_shape, camera_resolution, frame_fpath=Non
     
     plt.show()
 
+
 class Animation:
-    def __init__(self):
+    def __init__(self, title, scene_fpath):
         self.app = QApplication.instance()
         if self.app == None:
             self.app = QApplication([])
             
+        self.screen_res = self.app.desktop().screenGeometry()
+        self.screen_res = np.array([self.screen_res.width(), self.screen_res.height()])
+            
+        self.win = pyqtgraph.GraphicsWindow(title=title, size=self.screen_res/2)
+        self.layout = QGridLayout()
+        self.win.setLayout(self.layout)
+            
         self.view = gl.GLViewWidget()
         self.view.setBackgroundColor("#FFFFFF")
+        self.view.opts['distance']=13
+        self.view.pan(2.5,5,0)
+        self.view.orbit(-120,10)
+#         self.view.sizeHint = lambda: pyqtgraph.QtCore.QSize(self.screen_res[0]/2, self.screen_res[1]/2)
+#         self.view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # Grid
+        # Grid get_pairwise_3d_points_from_df
         grid = gl.GLGridItem(size=QtGui.QVector3D(50,50,1), color=(200,200,200,255))
         grid.setGLOptions('translucent')
         self.view.addItem(grid)
+        
+        self.K_arr, self.D_arr, self.R_arr, self.t_arr, self.cam_res = load_scene(scene_fpath)
+        self.D_arr = self.D_arr.reshape((-1,4))
+        self.n_cams = len(self.K_arr)
+        
+        for r, t in zip(self.R_arr, self.t_arr):
+            self.plot_camera(r, t)
         
     def rodrigues_to_vec(self, r):
         ang = 180 / np.pi * np.linalg.norm(r)
@@ -181,17 +201,21 @@ class Animation:
         cam.rotate(*R)
         cam.translate(*T)
         self.view.addItem(cam)
+        
+    def save_snapshot(self, filename, size=None):
+        pyqtgraph.makeQImage(self.view.renderToArray(size if size else self.screen_res)).save(filename)
+        self.app.quit()
+        
+    def show(self):
+        if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+            self.app.exec_()
     
     
 class Scene(Animation):
-    def __init__(self):
-        Animation.__init__(self)
-        self.view.opts['distance']=13
-        self.view.pan(2.5,5,0)
-        self.view.orbit(-120,10)
-        self.view.update()
-        self.view.show()
-
+    def __init__(self, scene_fpath):
+        Animation.__init__(self, "Scene Reconstruction", scene_fpath)
+        self.layout.addWidget(self.view, 0, 0, 1, 1)
+        
     def plot_calib_board(self, r, t, board_shape, board_edge_len):
         obj_pts = create_board_object_pts(board_shape, board_edge_len)
         calib_board = create_grid(obj_pts, board_shape)
@@ -200,23 +224,17 @@ class Scene(Animation):
         calib_board.rotate(*r)
         self.view.addItem(calib_board)
 
-    def plot_points(self, points, color=(0,0.5,0.5,0.5), size=3):
-        scatter = gl.GLScatterPlotItem(pos=points, color=color, size=size, pxMode=True)
+    def plot_points(self, points, color=(0,0.5,0.5,0.5), size=None):
+        scatter = gl.GLScatterPlotItem(pos=points, color=color, size=size if size else self.screen_res[0]/1e3, pxMode=True)
         scatter.setGLOptions('translucent')
         self.view.addItem(scatter)
-
-    def show(self):
-        self.app.exec_()
-
-    def save(self, filename, size=(800, 450)):
-        pyqtgraph.makeQImage(self.view.renderToArray(size)).save(filename)
-        self.app.quit()
 
         
 def plot_scene(scene_fpath, points_fpaths, cam_pairs=None, plot_defined_pts=False):
     
     k_arr, d_arr, r_arr, t_arr, _ = load_scene(scene_fpath)
     n_cams = len(k_arr)
+    scene = Scene(scene_fpath)
 
     def _get_corresponding_image_points(pts_1, names_1, pts_2, names_2):
         names = []
@@ -232,9 +250,8 @@ def plot_scene(scene_fpath, points_fpaths, cam_pairs=None, plot_defined_pts=Fals
         img_pts_2 = np.array(img_pts_2)
         return img_pts_1, img_pts_2, names
 
-    scene = Scene()  # the error happans here
-    for r, t in zip(r_arr, t_arr):
-        scene.plot_camera(r, t)
+
+    
     colors = [
         (1,0,0,0.99),     # red: cam pair 0&1
         (0,1,0,0.99),     # greeen: cam pair 1&2
@@ -263,7 +280,7 @@ def plot_scene(scene_fpath, points_fpaths, cam_pairs=None, plot_defined_pts=Fals
                     k_arr[i[0]], d_arr[i[0]], r_arr[i[0]], t_arr[i[0]],
                     k_arr[i[1]], d_arr[i[1]], r_arr[i[1]], t_arr[i[1]]
                 )
-                scene.plot_points(pts_3d, color=colors[cam_pairs.index(i)], size=10)
+                scene.plot_points(pts_3d, color=colors[cam_pairs.index(i)], size=scene.screen_res[0]/500)
             except:
                 pass
     else:
@@ -298,71 +315,51 @@ def plot_defined_pts_certain_pairs(scene_fpath, defined_points_fpath, cam_pairs)
     
     
 class Cheetah(Animation):
-    def __init__(self, scatter_frames, lines_frames, K_arr,D_arr,R_arr,t_arr):
-        Animation.__init__(self)
-        self.view.opts['distance']=30
+    def __init__(self, scatter_frames, lines_frames, scene_fpath):
+        Animation.__init__(self, "Cheetah Reconstruction", scene_fpath)
         self.scatter_frames = np.array(scatter_frames)
         self.lines_frames = np.array(lines_frames)
         self.n_frames = len(scatter_frames)
         self.frame = 0
-        self.n_cams = len(K_arr)
         
-        self.K_arr = K_arr
-        self.D_arr = D_arr
-        self.R_arr = R_arr
-        self.t_arr = t_arr
-        
-        self.win = pyqtgraph.GraphicsWindow(title="Cheetah")
-        self.layout = QGridLayout()
-        self.win.setLayout(self.layout)
-        self.win.setBackground((255, 255, 255))
-        
-        # ====== 3D ======
-        self.view.sizeHint = lambda: pyqtgraph.QtCore.QSize(1280, 720)
-        self.view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.layout.addWidget(self.view, 0, 0, self.n_cams, 1)
         
         #create dots
-        self.scatter = gl.GLScatterPlotItem(pos=self.scatter_frames[0], color=[1,0,0,1], size=0.05, pxMode=False)
+        self.scatter = gl.GLScatterPlotItem(pos=self.scatter_frames[0], color=[1,0,0,1], size=self.screen_res[0]/250, pxMode=True)
         self.scatter.setGLOptions('translucent')
         self.view.addItem(self.scatter)
         
         #create links
-        self.lines = gl.GLLinePlotItem(pos=self.lines_frames[0], color=[0,0,0,1], width=1.5, antialias=True, mode='lines')
+        self.lines = gl.GLLinePlotItem(pos=self.lines_frames[0], color=[0,0,0,1], width=self.screen_res[0]/1250, antialias=True, mode='lines')
         self.lines.setGLOptions('translucent')
         self.view.addItem(self.lines)
         
-        for r, t in zip(self.R_arr, self.t_arr):
-            self.plot_camera(r, t)
-        
         # ====== 2D ======
-        self.cam_w = []
         self.cam_data = []
-        self.cam_scatter = []
         self.cam_lines = []
+        cam_w = []
         for i in range(self.n_cams):
-            self.cam_w.append(pyqtgraph.PlotWidget(color=(0,0,0,1.0)))
-            self.cam_data.append(pyqtgraph.PlotDataItem(connect="pairs"))
-            self.cam_w[i].getPlotItem().addItem(self.cam_data[i])
-            self.cam_w[i].getPlotItem().setXRange(0, 2704)
-            self.cam_w[i].getPlotItem().setYRange(1520, 0)
-            self.cam_w[i].getPlotItem().invertY()
+            cam_w.append(pyqtgraph.PlotWidget(color=(0,0,0,1.0)))
+            self.cam_data.append(pyqtgraph.PlotDataItem(connect="pairs", name=f"Cam {i+1} Reprojection"))
+            cam_w[i].getPlotItem().addItem(self.cam_data[i])
+            cam_w[i].getPlotItem().setXRange(0, self.cam_res[0])
+            cam_w[i].getPlotItem().setYRange(self.cam_res[1], 0)
+            cam_w[i].getPlotItem().invertY()
+            cam_w[i].getPlotItem().addLegend() # the legend doesn't show for some reason
             
-            self.cam_w[i].sizeHint = lambda: pyqtgraph.QtCore.QSize(256, 144)
-            self.cam_w[i].setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            self.cam_w[i].setBackground((255,255,255))
             
-            self.layout.addWidget(self.cam_w[i], i, 1, 1, 1)
+            cam_w[i].sizeHint = lambda: pyqtgraph.QtCore.QSize(self.screen_res[0]/7, self.screen_res[1]/7)
+            cam_w[i].setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            cam_w[i].setBackground((255,255,255))
+            
+            self.layout.addWidget(cam_w[i], i, 1, 1, 1)
             cam_lines_temp = []
             for j in range(self.n_frames):
-                lines_frames_2d = [traj_opt.pt3d_to_2d(*pt, self.K_arr[i], self.D_arr[i], self.R_arr[i], self.t_arr[i])for pt in self.lines_frames[j]]
+                cam_params = [self.K_arr[i], self.D_arr[i], self.R_arr[i], self.t_arr[i]]
+                lines_frames_2d = [traj_opt.pt3d_to_2d(*pt, *cam_params)for pt in self.lines_frames[j]] # change this to use calib.project_points_fisheye?
                 cam_lines_temp.append(lines_frames_2d)
             self.cam_lines.append(np.array(cam_lines_temp))
             self.cam_data[i].setData(self.cam_lines[i][0])
-
-    def start(self):
-        if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-            QApplication.instance().exec_()
 
     def update(self):
         self.scatter.setData(pos=self.scatter_frames[self.frame])
@@ -375,14 +372,14 @@ class Cheetah(Animation):
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update)
         timer.start(100)
-        self.start()
+        self.show()
         
     def plot(self, frames):
         self.scatter.setData(pos=self.scatter_frames[frames].reshape(-1, 3))
         self.lines.setData(pos=self.lines_frames[frames].reshape(-1, 3))
         for i in range(self.n_cams):
             self.cam_data[i].setData(self.cam_lines[i][frames].reshape(-1, 2))
-        self.start()
+        self.show()
         
 
 # def plot_cheetah_graphs(plot_style_fpath, lure_pts, x_opt):
@@ -454,5 +451,5 @@ def plot_cheetah_graphs(plot_style_fpath, x_opt):
     axs[7,1].set_title("Right back knee angle")
     axs[7,1].legend(['theta13'])
     
-    fig.savefig(os.path.join(DATA_DIR, 'figure.pdf'))
+#     fig.savefig(os.path.join(DATA_DIR, 'figure.pdf'))
     return fig, axs
