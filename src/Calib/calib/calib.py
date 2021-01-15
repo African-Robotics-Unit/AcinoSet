@@ -3,6 +3,7 @@ from typing import Tuple, Union
 from nptyping import Array
 import cv2
 from .utils import create_board_object_pts
+from .misc import global_positions, rotation_matrix_from_vectors, rot_z
 from scipy.sparse import lil_matrix
 from scipy.optimize import least_squares
 import time
@@ -12,12 +13,12 @@ from pprint import pprint
 
 # ========== STANDARD CAMERA MODEL ==========
 def calibrate_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[np.float32, ..., ..., 2],
-                     camera_resolution: Tuple[int, int]) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], None]:
+                     cam_res: Tuple[int, int]) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], None]:
     assert len(img_pts)>=4, "Need at least 4 vaild frames to perform calibration."
     obj_pts = np.repeat(obj_pts[np.newaxis, :, :], img_pts.shape[0], axis=0).reshape((img_pts.shape[0], -1, 1, 3))
     img_pts = img_pts.reshape((img_pts.shape[0], -1, 1, 2))
     flags = cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_FIX_PRINCIPAL_POINT
-    ret, k, d, r, t = cv2.calibrateCamera(obj_pts, img_pts, camera_resolution, None, None, flags=flags)
+    ret, k, d, r, t = cv2.calibrateCamera(obj_pts, img_pts, cam_res, None, None, flags=flags)
     if ret:
         return k, d, r, t
     return None
@@ -31,22 +32,22 @@ def create_undistort_point_function(k: Array[np.float64, 3, 3], d: Array[np.floa
     return undistort_points
 
 
-def create_undistort_img_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...], camera_resolution):
-    map_x, map_y = cv2.initUndistortRectifyMap(k, d, None, k, camera_resolution, cv2.CV_32FC1)
+def create_undistort_img_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...], cam_res):
+    map_x, map_y = cv2.initUndistortRectifyMap(k, d, None, k, cam_res, cv2.CV_32FC1)
     def undistort_image(img):
         dst = cv2.remap(img, map_x, map_y, cv2.INTER_LINEAR)
         return dst
     return undistort_image
 
 
-def calibrate_pair_extrinsics(obj_pts, img_pts_1, img_pts_2, k_1, d_1, k_2, d_2, camera_resolution):
+def calibrate_pair_extrinsics(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res):
     flags = cv2.CALIB_FIX_INTRINSIC
     term_crit = (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 30, 1e-5)
     obj_pts = np.repeat(obj_pts[np.newaxis, :, :], img_pts_1.shape[0], axis=0).reshape((img_pts_1.shape[0], -1, 1, 3))
     img_pts_1 = img_pts_1.reshape((img_pts_1.shape[0], img_pts_1.shape[1]*img_pts_1.shape[2], 1, 2))
     img_pts_2 = img_pts_2.reshape((img_pts_2.shape[0], img_pts_2.shape[1]*img_pts_2.shape[2], 1, 2))
-    rms, *_, r, t, _, _ = cv2.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k_1, d_1,k_2, d_2,
-                                              camera_resolution, flags=flags, criteria=term_crit)
+    rms, *_, r, t, _, _ = cv2.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k1, d1,k2, d2,
+                                              cam_res, flags=flags, criteria=term_crit)
     return rms, r, t
 
 
@@ -71,7 +72,7 @@ def project_points(obj_pts, k, d, r, t):
 
 # ========== FISHEYE CAMERA MODEL ==========
 def calibrate_fisheye_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[np.float32, ..., ..., 2],
-                             camera_resolution: Tuple[int, int]) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray,
+                             cam_res: Tuple[int, int]) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray,
                                                                     np.ndarray, Array[np.float32, ..., ..., 2]], None]:
     assert len(img_pts) >= 4, "Need at least 4 vaild frames to perform calibration."
     obj_pts_new = np.repeat(obj_pts[np.newaxis, :, :], img_pts.shape[0], axis=0).reshape((img_pts.shape[0], -1, 1, 3))
@@ -79,7 +80,7 @@ def calibrate_fisheye_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[
     flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC + cv2.fisheye.CALIB_CHECK_COND + cv2.fisheye.CALIB_FIX_SKEW
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 1000, 1e-6)
     try:
-        ret, k, d, r, t = cv2.fisheye.calibrate(obj_pts_new, img_pts_new, camera_resolution, None, None, None, None, flags,
+        ret, k, d, r, t = cv2.fisheye.calibrate(obj_pts_new, img_pts_new, cam_res, None, None, None, None, flags,
                                                 criteria)
         if ret:
             return k, d, r, t, img_pts, ret
@@ -88,7 +89,7 @@ def calibrate_fisheye_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[
             idx = int(str(e)[str(e).find("input array ") + 12:].split(" ")[0])
             print(f"Image points at index {idx} caused an ill-conditioned matrix. Removing from array...")
             img_pts = img_pts[np.arange(len(img_pts)) != idx]
-            return calibrate_fisheye_camera(obj_pts, img_pts, camera_resolution)
+            return calibrate_fisheye_camera(obj_pts, img_pts, cam_res)
 
 
 def create_undistort_fisheye_point_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...]):
@@ -99,8 +100,8 @@ def create_undistort_fisheye_point_function(k: Array[np.float64, 3, 3], d: Array
     return undistort_points
 
 
-def create_undistort_fisheye_img_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...], camera_resolution):
-    map_x, map_y = cv2.fisheye.initUndistortRectifyMap(k, d, np.eye(3), k, camera_resolution, cv2.CV_32FC1)
+def create_undistort_fisheye_img_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...], cam_res):
+    map_x, map_y = cv2.fisheye.initUndistortRectifyMap(k, d, np.eye(3), k, cam_res, cv2.CV_32FC1)
     def undistort_image(img):
         dst = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
         return dst
@@ -108,13 +109,13 @@ def create_undistort_fisheye_img_function(k: Array[np.float64, 3, 3], d: Array[n
 
 
 
-def calibrate_pair_extrinsics_fisheye(obj_pts, img_pts_1, img_pts_2, k_1, d_1, k_2, d_2, camera_resolution):
+def calibrate_pair_extrinsics_fisheye(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res):
     flags = cv2.fisheye.CALIB_FIX_INTRINSIC
     term_crit = (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 100, 1e-5)
     obj_pts = np.repeat(obj_pts[np.newaxis, :, :], img_pts_1.shape[0], axis=0).reshape((img_pts_1.shape[0], 1, -1, 3))
     img_pts_1 = img_pts_1.reshape((img_pts_1.shape[0], 1, img_pts_1.shape[1]*img_pts_1.shape[2], 2))
     img_pts_2 = img_pts_2.reshape((img_pts_2.shape[0], 1, img_pts_2.shape[1]*img_pts_2.shape[2], 2))
-    rms, *_, r, t = cv2.fisheye.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k_1, d_1, k_2, d_2, camera_resolution,
+    rms, *_, r, t = cv2.fisheye.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res,
                                                 flags=flags, criteria=term_crit)
     return rms, r, t
 
@@ -130,6 +131,7 @@ def triangulate_points_fisheye(img_pts_1, img_pts_2, k1, d1, r1, t1, k2, d2, r2,
     pts_3d = (pts_4d[:3] / pts_4d[3]).T
     return pts_3d
 
+
 def project_points_fisheye(obj_pts, k, d, r, t):
     obj_pts_reshaped = obj_pts.reshape((-1, 1, 3))
     r_vec = cv2.Rodrigues(r)[0]
@@ -137,146 +139,125 @@ def project_points_fisheye(obj_pts, k, d, r, t):
     return pts
 
 
+# this function is deprecated in favour of project_points_fisheye above, but remains here for educational purposes
+# also the same as traj_opt.pt3d_to_2d
+def project_3d_to_2d(pos_3d: np.ndarray, R: np.ndarray, T: np.ndarray, D: np.ndarray, K: np.ndarray):
+    """Projects a numpy array of 3D points (shape Nx3) onto the given camera's image plane.
+    Returns a numpy array of 2D points (shape Nx2) representing the pixel coordinates of the 3D point."""
+    #rotate and translate to camera frame
+    pos = pos_3d.reshape((-1, 3)).T #ensure points are column vectors
+    cam_pos = R @ pos + T
+    #project points onto camera plane
+    a = cam_pos[0]/cam_pos[2]
+    b = cam_pos[1]/cam_pos[2]
+    # fisheye
+    r = (a**2 + b**2)**0.5
+    th = np.arctan(r)
+    # fisheye distortion
+    th_D = th * (1 + D[0]*th**2 + D[1]*th**4 + D[2]*th**6 + D[3]*th**8)
+    # distorted points
+    x_P = (th_D/r)*a
+    y_P = (th_D/r)*b
+    # convert to pixel coordinates
+    h = np.array([K[0,0]*x_P + K[0,2], K[1,1]*y_P + K[1,2]], dtype=np.float32).T
+    return h
+
+
 # ========== ESTIMATION ALGORITHMS ==========
 
 
-def calibrate_pairwise_extrinsics_v2(calib_func, img_pts_arr, fnames_arr, k_arr, d_arr, camera_resolution, board_shape, board_edge_len, dummy_scene_data, start_camera_i=0):
-    # calib_func is one of 'calibrate_pair_extrinsics' or 'calibrate_pair_extrinsics_fisheye'
-    n_cam = len(img_pts_arr)
-    r_arr = []
-    t_arr = []
-    # Set camera 1's initial position and rotation
-    R1 = np.array([[1, 0, 0],
-                   [0, 0, -1],
-                   [0, 1, 0]], dtype=np.float32)
-    T1 = np.array([[0, 0, 0]], dtype=np.float32).T
-    r_arr.append(R1)
-    t_arr.append(T1)
-    # Get relative pairwise transformations between subsequent cameras
-    for x in range(n_cam-1):
-        i, j = sorted([(x + start_camera_i) % n_cam, (x + start_camera_i + 1) % n_cam]) # ensures cam 0 is always the reference
-        print(f"Calibrating cams {i}&{j}")
-        if i == 0: # needed for calibrating cam pairs 0&6 for example
-            R1 = np.array([[1, 0, 0],
-                           [0, 0, -1],
-                           [0, 1, 0]], dtype=np.float32)
-            T1 = np.array([[0, 0, 0]], dtype=np.float32).T
-        k1 = k_arr[i]
-        d1 = d_arr[i]
-        k2 = k_arr[j]
-        d2 = d_arr[j]
-        points_1 = img_pts_arr[i]
-        fnames_1 = fnames_arr[i]
-        points_2 = img_pts_arr[j]
-        fnames_2 = fnames_arr[j]
-        # Extract corresponding points between cameras into img_pts 1 & 2
-        img_pts_1 = []
-        img_pts_2 = []
-        exist_corresponding_points = False
-        for a, f in enumerate(fnames_1):
-            if f in fnames_2:
-                b = fnames_2.index(f)
-                img_pts_1.append(points_1[a])
-                img_pts_2.append(points_2[b])
-                exist_corresponding_points = True
-        if not exist_corresponding_points:
-            print(f"No corresponding points between img_pts at index {i} and {j}")
-            R2 = np.array(dummy_scene_data['r'][len(R1)])
-            T2 = np.array(dummy_scene_data['t'][len(T1)])
-            print(f"Instead of that dummy_R[{len(R1)}] and dummy_T[{len(T1)}] were used")
-        else:
-            img_pts_1 = np.array(img_pts_1, dtype=np.float32)
-            img_pts_2 = np.array(img_pts_2, dtype=np.float32)
-            # Create object points
-            obj_pts = create_board_object_pts(board_shape, board_edge_len)
-            rms, r, t = calib_func(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, camera_resolution)
-            # Calculate camera pose in the world coordinates
-            # Note: T is the world origin position in the camera coordinates
-            #       the world position of the camera C = -(R^-1)@T.
-            #       Similarly, the rotation of the camera in world coordinates
-            #       is given by R^-1.
-            #       The inverse of a rotation matrix is also its transpose.
-            # https://en.wikipedia.org/wiki/Camera_resectioning#Extrinsic_parameters
-            R2 = r @ R1     # matrix product
-            T2 = r @ T1 + t
-        # Update and add to list
-        R1 = R2
-        T1 = T2
-        # Add camera extrinsic params
-        r_arr.append(R1)
-        t_arr.append(T1)
-    print("Done!")
+def fix_skew_scene(cams, r_arr, t_arr):
+    cams = np.array(cams)
+    r_arr = np.array(r_arr)
+    t_arr = np.array(t_arr)
+
+    cam_sets = [cams[np.where(cams < 3)], cams[np.where(cams > 2)]]
+    z_vec = np.array([[0], [0], [1]])
+
+    # check if one of the cam sets have more than 1 cam
+    arr_lengths = np.array([len(cam_sets[0]),len(cam_sets[1])])
+    idx = np.where(arr_lengths>1)[0]
+    if len(idx):
+        # get cams on the one side of the scene that forms a line
+        idxs = [cams.tolist().index(i) for i in cam_sets[idx[0]]]
+        positions = global_positions(r_arr, t_arr)[idxs].reshape(-1, 3)
+        # get vector that defines the best fit line
+        mean = positions.mean(axis=0)
+        *_, arr = np.linalg.svd(positions - mean)
+        line_vec = arr[0]
+        # align with x direction
+        x_vec = np.array([[1], [0], [0]])
+        R = rotation_matrix_from_vectors(line_vec, x_vec)
+        r_arr = np.array([r @ R.T for r in r_arr])
+
+    # check if cams lie on a plane
+    if len(cams)>2 and len(cam_sets[0]) and len(cam_sets[1]):
+        # ax + by + cz = d --> Ax=B where x is the plane normal: (a, b, c).T
+        positions = global_positions(r_arr, t_arr).reshape(-1, 3) # A
+        intercepts = np.ones((len(positions), 1)) # B
+        plane_normal = np.linalg.pinv(positions) @ intercepts # x = A^-1 @ B = (a, b, c)
+        # align camera plane with xy plane
+        R = rotation_matrix_from_vectors(plane_normal, z_vec)
+        r_arr = np.array([r @ R.T for r in r_arr])
+
+    # place cams half a meter above ground
+    height = 0.5*z_vec
+    t_arr = np.array([t - r @ height for r, t in zip(r_arr, t_arr)])
+
     return r_arr, t_arr
 
-def calibrate_pairwise_extrinsics(
-    calib_func, img_pts_arr, fnames_arr,
-    k_arr, d_arr, camera_resolution,
-    board_shape, board_edge_len,
-    R_init=[
-        [1, 0, 0],
-        [0, 0, -1],
-        [0, 1, 0]
-    ],
-    T_init=[
-        [0],
-        [0],
-        [0]
-    ],
-    start_camera_i=0
-):
+
+def calibrate_pairwise_extrinsics(calib_func, img_pts_arr, fnames_arr, k_arr, d_arr,
+                                     cam_res, board_shape, board_edge_len,
+                                     dummy_scene_data, cams, cam_pairs):
     # calib_func is one of 'calibrate_pair_extrinsics' or 'calibrate_pair_extrinsics_fisheye'
-    n_cam = len(img_pts_arr)
-    r_arr = []
-    t_arr = []
+    r_arr = [[] for _ in cams]
+    t_arr = r_arr.copy()
     # Set camera 1's initial position and rotation
-    R1 = np.array(R_init, dtype=np.float32)
-    T1 = np.array(T_init, dtype=np.float32)
-    r_arr.append(R1)
-    t_arr.append(T1)
+    r_arr[0] = np.array([[1, 0, 0],
+                         [0, 0, -1],
+                         [0, 1, 0]], dtype=np.float32)
+    t_arr[0] = np.array([[0, 0, 0]], dtype=np.float32).T
     # Get relative pairwise transformations between subsequent cameras
-    for x in range(n_cam-1):
-        i = (x + start_camera_i) % n_cam
-        j = (x + start_camera_i + 1) % n_cam
-        k1 = k_arr[i]
-        d1 = d_arr[i]
-        k2 = k_arr[j]
-        d2 = d_arr[j]
+    print(f"Pairwise calibration using cam pairs {cam_pairs}\n")
+    for cam_pair in cam_pairs:
+        print(f"Calibrating cams {cam_pair[0]} & {cam_pair[1]}")
+        i, j = (cams.index(cam_pair[0]), cams.index(cam_pair[1]))
         points_1 = img_pts_arr[i]
         fnames_1 = fnames_arr[i]
         points_2 = img_pts_arr[j]
         fnames_2 = fnames_arr[j]
-        # Extract corresponding points between cameras into img_pts 1 & 2
+        # Extract common points between cameras into img_pts 1 & 2
         img_pts_1 = []
         img_pts_2 = []
-        exist_corresponding_points = False
         for a, f in enumerate(fnames_1):
             if f in fnames_2:
                 b = fnames_2.index(f)
                 img_pts_1.append(points_1[a])
                 img_pts_2.append(points_2[b])
-                exist_corresponding_points = True
+
+        print(f"Found {len(img_pts_1)} image frames common to cams {cam_pair[0]} & {cam_pair[1]}")
+        if not len(img_pts_1):
+            r_arr[j] = np.array(dummy_scene_data['r'][cam_pair[1]])
+            t_arr[j] = np.array(dummy_scene_data['t'][cam_pair[1]])
+            print(f"Instead, R[{cam_pair[1]}] and T[{cam_pair[1]}] from dummy_scene.json were used\n")
         else:
             img_pts_1 = np.array(img_pts_1, dtype=np.float32)
             img_pts_2 = np.array(img_pts_2, dtype=np.float32)
             # Create object points
             obj_pts = create_board_object_pts(board_shape, board_edge_len)
-            rms, r, t = calib_func(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, camera_resolution)
-            # Calculate camera pose in the world coordinates
-            # Note: T is the world origin position in the camera coordinates
-            #       the world position of the camera C = -(R^-1)@T.
-            #       Similarly, the rotation of the camera in world coordinates
-            #       is given by R^-1.
-            #       The inverse of a rotation matrix is also its transpose.
+            rms, r, t = calib_func(obj_pts, img_pts_1, img_pts_2, k_arr[i], d_arr[i], k_arr[j], d_arr[j], cam_res)
+            print(f"RMS Reprojection Error: {rms}\n")
             # https://en.wikipedia.org/wiki/Camera_resectioning#Extrinsic_parameters
-            R2 = r @ R1     # matrix product
-            T2 = r @ T1 + t
-        # Update and add to list
-        R1 = R2
-        T1 = T2
-        # Add camera extrinsic params
-        r_arr.append(R1)
-        t_arr.append(T1)
+            # T is the world origin position in the camera coordinates.
+            # The world position of the camera is C = -(R^-1)@T.
+            # Similarly, the rotation of the camera in world coordinates is given by R^-1
+            r_arr[j] = r @ r_arr[i] # matrix product
+            t_arr[j] = r @ t_arr[i] + t
 
+    r_arr, t_arr = fix_skew_scene(cams, r_arr, t_arr)
+
+    print("Done!")
     return r_arr, t_arr
 
 
@@ -352,12 +333,9 @@ def prepare_calib_board_data_for_bundle_adjustment(img_pts_arr, fnames_arr, boar
     return points_2d, points_3d, point_3d_indices, camera_indices
 
 
-def prepare_manual_points_for_bundle_adjustment(
-    img_pts_arr,    # (n_points, n_cameras, 2)
-    k_arr, d_arr, r_arr, t_arr,
-    triangulate_func
-):
-    pts = img_pts_arr.swapaxes(0,1) #should now have shape (n_cameras, n_points, 2)
+def prepare_manual_points_for_bundle_adjustment(img_pts_arr, k_arr, d_arr, r_arr, t_arr, triangulate_func):
+    # img_pts_arr shape: (n_points, n_cameras, 2)
+    pts = img_pts_arr.swapaxes(0,1) # should now have shape (n_cameras, n_points, 2)
     n_cam = pts.shape[0]
     n_pts = pts.shape[1]
 

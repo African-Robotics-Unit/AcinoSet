@@ -33,7 +33,7 @@ from .plotting import plot_calib_board, Scene
 def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len, window_size=11, remove_unused_images=False):
     print(f"Finding calibration board corners for images in {img_dir}")
     filepaths = sorted([os.path.join(img_dir, fname) for fname in os.listdir(img_dir) if fname.endswith(".jpg") or fname.endswith(".png")])
-    points, fpaths, camera_resolution = find_corners_images(filepaths, board_shape, window_size=window_size)
+    points, fpaths, cam_res = find_corners_images(filepaths, board_shape, window_size=window_size)
     saved_fnames = [os.path.basename(f) for f in fpaths]
     saved_points = points.tolist()
     if remove_unused_images:
@@ -41,78 +41,92 @@ def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len,
             if os.path.basename(f) not in saved_fnames:
                 print(f"Removing {f}")
                 os.remove(f)
-    save_points(out_fpath, saved_points, saved_fnames, board_shape, board_edge_len, camera_resolution)
+    save_points(out_fpath, saved_points, saved_fnames, board_shape, board_edge_len, cam_res)
 
 
 def plot_corners(points_fpath):
-    points, fnames, board_shape, board_edge_len, camera_resolution = load_points(points_fpath)
-    plot_calib_board(points, board_shape, camera_resolution)
+    points, fnames, board_shape, board_edge_len, cam_res = load_points(points_fpath)
+    plot_calib_board(points, board_shape, cam_res)
 
 
 def plot_points_standard_undistort(points_fpath, camera_fpath):
-    k, d, camera_resolution = load_camera(camera_fpath)
+    k, d, cam_res = load_camera(camera_fpath)
     points, _, board_shape, *_ = load_points(points_fpath)
     undistort_pts = create_undistort_point_function(k, d)
     undistorted_points = undistort_pts(points).reshape(points.shape)
-    plot_calib_board(undistorted_points, board_shape, camera_resolution)
+    plot_calib_board(undistorted_points, board_shape, cam_res)
 
 
 def plot_points_fisheye_undistort(points_fpath, camera_fpath):
-    k, d, camera_resolution = load_camera(camera_fpath)
+    k, d, cam_res = load_camera(camera_fpath)
     points, _, board_shape, *_ = load_points(points_fpath)
     undistort_pts = create_undistort_fisheye_point_function(k, d)
     undistorted_points = undistort_pts(points).reshape(points.shape)
-    plot_calib_board(undistorted_points, board_shape, camera_resolution)
+    plot_calib_board(undistorted_points, board_shape, cam_res)
 
 
 
 def calibrate_standard_intrinsics(points_fpath, out_fpath):
-    points, fnames, board_shape, board_edge_len, camera_resolution = load_points(points_fpath)
+    points, fnames, board_shape, board_edge_len, cam_res = load_points(points_fpath)
     obj_pts = create_board_object_pts(board_shape, board_edge_len)
-    k, d, r, t = calibrate_camera(obj_pts, points, camera_resolution)
+    k, d, r, t = calibrate_camera(obj_pts, points, cam_res)
     print("K:\n", k, "\nD:\n", d)
-    save_camera(out_fpath, camera_resolution, k, d)
+    save_camera(out_fpath, cam_res, k, d)
     return k, d, r, t, points
 
 
 def calibrate_fisheye_intrinsics(points_fpath, out_fpath):
-    points, fnames, board_shape, board_edge_len, camera_resolution = load_points(points_fpath)
+    points, fnames, board_shape, board_edge_len, cam_res = load_points(points_fpath)
     obj_pts = create_board_object_pts(board_shape, board_edge_len)
-    k, d, r, t, used_points, rms = calibrate_fisheye_camera(obj_pts, points, camera_resolution)
+    k, d, r, t, used_points, rms = calibrate_fisheye_camera(obj_pts, points, cam_res)
     print("K:\n", k, "\nD:\n", d)
-    save_camera(out_fpath, camera_resolution, k, d)
+    save_camera(out_fpath, cam_res, k, d)
     return k, d, r, t, used_points, rms
 
 
 def _calibrate_pairwise_extrinsics(
     calib_func,
     camera_fpaths, points_fpaths, out_fpath,
-    camera_indices=None, dummy_scene_fpath=None, start_camera_i=0
+    dummy_scene_fpath=None, cams=None, cam_pairs=None
 ):
     k_arr = []
     d_arr = []
-    camera_resolution = None
-    camera_indices = range(len(camera_fpaths)) if camera_indices is None else camera_indices
+    cam_res = None
+    
+    # determine cam pairs to be used in calibration
+    if cams is None:
+        cams = np.array([int(list(filter(str.isdigit, fpath))[-1]) for fpath in points_fpaths])
+        cams -= 1 # 0 based indexing
+        
+    cam_pairs = np.array([cams[0:-1], cams[1:None]]).T
 
+    if np.where(cams>3)[0].size>0:
+        # check if common frames exist between cams[0] and cams[-1]
+        _, frames_1, *_ = load_points(points_fpaths[0])
+        _, frames_2, *_ = load_points(points_fpaths[len(cams)-1])
+        num_common_frames = len(set(frames_1).intersection(set(frames_2)))
+        if num_common_frames >= 5:
+            cam_set_2_idxs = np.where(cams > 2)[0] # find any cam in 2nd cam set
+            temp_arr = np.concatenate([[cams[0]], cams[cam_set_2_idxs[-1:None:-1]]])
+            cam_pairs[cam_set_2_idxs-1] = np.array([temp_arr[0:-1], temp_arr[1:None]]).T
+    
     # Load camera parameters
-    for i in camera_indices:
-        c = camera_fpaths[i]
-        k1, d1, camera_resolution_1 = load_camera(c)
+    for c in camera_fpaths:
+        k1, d1, cam_res_1 = load_camera(c)
         k_arr.append(k1)
         d_arr.append(d1)
-        if camera_resolution is None:
-            camera_resolution = camera_resolution_1
+        if cam_res is None:
+            cam_res = cam_res_1
         else:
-            assert camera_resolution == camera_resolution_1
+            assert cam_res == cam_res_1
 
     # Load the image points
     img_pts_arr = []
     fnames_arr = []
     board_shape = None
     board_edge_len = None
-    for i in camera_indices:
-        p = points_fpaths[i]
-        points_1, fnames_1, board_shape_1, board_edge_len_1, camera_resolution_1 = load_points(p)
+    for p in points_fpaths:
+        points_1, fnames_1, board_shape_1, board_edge_len_1, cam_res_1 = load_points(p)
         img_pts_arr.append(points_1)
         fnames_arr.append(fnames_1)
         if board_shape is None:
@@ -124,74 +138,54 @@ def _calibrate_pairwise_extrinsics(
         else:
             assert board_edge_len == board_edge_len_1
 
-    # load the initial position
-    if dummy_scene_fpath is not None:
-        _, _, r_dummy_arr, t_dummy_arr, _ = load_scene(dummy_scene_fpath)
-        r_init = r_dummy_arr[camera_indices[0]]
-        t_init = t_dummy_arr[camera_indices[0]]
-    else:
-        r_init = [
-            [1, 0, 0],
-            [0, 0, -1],
-            [0, 1, 0]
-        ]
-        t_init = [
-            [0],
-            [0],
-            [0]
-        ]
-
     r_arr, t_arr = calibrate_pairwise_extrinsics(
-        calib_func,
-        img_pts_arr,
-        fnames_arr,
-        k_arr, d_arr,
-        camera_resolution,
-        board_shape, board_edge_len,
-        R_init=r_init,
-        T_init=t_init,
-        start_camera_i=start_camera_i
+        calib_func, img_pts_arr, fnames_arr, k_arr, d_arr,
+        cam_res, board_shape, board_edge_len,
+        dummy_scene_fpath, cams.tolist(), cam_pairs.tolist()
     )
-    save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, camera_resolution)
+    save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res)
 
 
-def calibrate_standard_extrinsics_pairwise(camera_fpaths, points_fpaths, out_fpath, start_camera_i=0):
-    _calibrate_pairwise_extrinsics(calibrate_pair_extrinsics, camera_fpaths, points_fpaths, out_fpath, start_camera_i)
+def calibrate_standard_extrinsics_pairwise(camera_fpaths, points_fpaths, out_fpath,
+                                           dummy_scene_fpath=None, cams=None, cam_pairs=None
+                                          ):
+    _calibrate_pairwise_extrinsics(calibrate_pair_extrinsics,
+                                   camera_fpaths, points_fpaths, out_fpath,
+                                   dummy_scene_fpath, cams, cam_pairs
+                                  )
 
 
-def calibrate_fisheye_extrinsics_pairwise(
-    camera_fpaths, points_fpaths, out_fpath,
-    camera_indices=None, dummy_scene_fpath=None, start_camera_i=0
-):
-    _calibrate_pairwise_extrinsics(
-        calibrate_pair_extrinsics_fisheye,
-        camera_fpaths, points_fpaths, out_fpath,
-        camera_indices, dummy_scene_fpath, start_camera_i
-    )
+def calibrate_fisheye_extrinsics_pairwise(camera_fpaths, points_fpaths, out_fpath,
+                                          dummy_scene_fpath=None, cams=None, cam_pairs=None
+                                         ):
+    _calibrate_pairwise_extrinsics(calibrate_pair_extrinsics_fisheye,
+                                   camera_fpaths, points_fpaths, out_fpath,
+                                   dummy_scene_fpath, cams, cam_pairs
+                                  )
 
 # this doesnt work!!
 def _calibrate_pairwise_extrinsics_manual(calib_func, camera_fpaths, points_fpath, out_fpath):
     k_arr = []
     d_arr = []
-    camera_resolution = None
+    cam_res = None
     # Load camera parameters
     for c in camera_fpaths:
-        k1, d1, camera_resolution_1 = load_camera(c)
+        k1, d1, cam_res_1 = load_camera(c)
         k_arr.append(k1)
         d_arr.append(d1)
-        if camera_resolution is None:
-            camera_resolution = camera_resolution_1
+        if cam_res is None:
+            cam_res = cam_res_1
         else:
-            assert camera_resolution == camera_resolution_1
+            assert cam_res == cam_res_1
     # Load the image points
     with open(points_fpath, 'r') as f:
         img_pts_arr = np.array(json.load(f)["points"])
-        r_arr, t_arr = calibrate_pairwise_extrinsics_manual(calib_func, img_pts_arr, k_arr, d_arr, camera_resolution)
-        save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, camera_resolution)
+        r_arr, t_arr = calibrate_pairwise_extrinsics_manual(calib_func, img_pts_arr, k_arr, d_arr, cam_res)
+        save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res)
 
 # Should this not be in calib.py?
-def calibrate_pairwise_extrinsics_manual(calib_func, img_pts_arr, k_arr, d_arr, camera_resolution):
-    # This code still needs to be updated so that its similar to calibrate_pairwise_extrinsics_fisheye_v2
+def calibrate_pairwise_extrinsics_manual(calib_func, img_pts_arr, k_arr, d_arr, cam_res):
+    # This code still needs to be updated so that its similar to calibrate_pairwise_extrinsics_fisheye
     # calib_func is one of 'calibrate_pair_extrinsics' or 'calibrate_pair_extrinsics_fisheye'
     n_cam = len(img_pts_arr)
     r_arr = []
@@ -217,7 +211,7 @@ def calibrate_pairwise_extrinsics_manual(calib_func, img_pts_arr, k_arr, d_arr, 
         img_pts_2 = np.array(img_pts[1].reshape((-1,1,1,2)), dtype=np.float32)
         # Create object points
         obj_pts = np.array([[0,0,0]], dtype=np.float32)
-        rms, r, t = calib_func(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, camera_resolution)
+        rms, r, t = calib_func(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res)
         # Calculate camera pose in the world coordinates
         # Note: T is the world origin position in the camera coordinates
         #       the world position of the camera C = -(R^-1)@T.
@@ -236,13 +230,13 @@ def calibrate_pairwise_extrinsics_manual(calib_func, img_pts_arr, k_arr, d_arr, 
     return r_arr, t_arr
 
 
-def plot_scene(scene_fpath):
-    _, _, r_arr, t_arr, _ = load_scene(scene_fpath)
-    scene = Scene()
-    for r, t in zip(r_arr, t_arr):
-        scene.plot_camera(r, t)
-    scene.show()
-    return scene
+# def plot_scene(scene_fpath):
+#     _, _, r_arr, t_arr, _ = load_scene(scene_fpath)
+#     scene = Scene()
+#     for r, t in zip(r_arr, t_arr):
+#         scene.plot_camera(r, t)
+#     scene.show()
+#     return scene
 
 
 def _sba_board_points(scene_fpath, points_fpaths, defined_points_fpath, out_fpath, triangulate_func, project_func, camera_indices=None, only_defined_points=False):
@@ -258,7 +252,7 @@ def _sba_board_points(scene_fpath, points_fpaths, defined_points_fpath, out_fpat
         img_pts_arr.append(points)
         fnames_arr.append(fnames)
     # load scene
-    k_arr, d_arr, r_arr, t_arr, camera_resolution = load_scene(scene_fpath)
+    k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_fpath)
     assert len(k_arr) == len(img_pts_arr)
     if defined_points_fpath is not None:
         # load manually defined points
@@ -267,34 +261,27 @@ def _sba_board_points(scene_fpath, points_fpaths, defined_points_fpath, out_fpat
         if only_defined_points:
             print('bundle_adjust_board_points_and_extrinsics_with_only_defined_points')
             obj_pts, r_arr, t_arr, res = bundle_adjust_board_points_and_extrinsics_with_only_defined_points(
-                defined_points,
-                board_shape,
-                k_arr, d_arr,
-                r_arr, t_arr,
+                defined_points, board_shape,
+                k_arr, d_arr, r_arr, t_arr,
                 triangulate_func, project_func
             )
         else:
             print('bundle_adjust_board_points_and_extrinsics_with_defined_points')
             obj_pts, r_arr, t_arr, res = bundle_adjust_board_points_and_extrinsics_with_defined_points(
-                img_pts_arr,
-                fnames_arr,
-                defined_points,
-                board_shape,
-                k_arr, d_arr,
-                r_arr, t_arr,
+                img_pts_arr, fnames_arr,
+                defined_points, board_shape,
+                k_arr, d_arr, r_arr, t_arr,
                 triangulate_func, project_func
             )
     else:
         print('bundle_adjust_board_points_and_extrinsics')
         obj_pts, r_arr, t_arr, res = bundle_adjust_board_points_and_extrinsics(
-            img_pts_arr,
-            fnames_arr,
+            img_pts_arr, fnames_arr,
             board_shape,
-            k_arr, d_arr,
-            r_arr, t_arr,
+            k_arr, d_arr, r_arr, t_arr,
             triangulate_func, project_func
         )
-    save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, camera_resolution)
+    save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res)
     return res
 
 def sba_board_points(scene_fpath, points_fpaths, defined_points_fpath, out_fpath):

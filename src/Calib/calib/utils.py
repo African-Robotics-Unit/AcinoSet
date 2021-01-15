@@ -13,7 +13,7 @@ def create_board_object_pts(board_shape: Tuple[int, int], square_edge_length: np
     return object_pts
 
 
-def save_points(out_fpath, img_points, img_fnames, board_shape, board_edge_len, camera_resolution):
+def save_points(out_fpath, img_points, img_fnames, board_shape, board_square_len, cam_res):
     print(f"Saving points to {out_fpath}")
     created_timestamp = str(datetime.now())
     if isinstance(img_points, np.ndarray):
@@ -22,8 +22,9 @@ def save_points(out_fpath, img_points, img_fnames, board_shape, board_edge_len, 
     data = {
         "created_timestamp": created_timestamp,
         "board_shape": board_shape,
+        "board_square_len": board_square_len,
         "board_edge_len": board_edge_len,
-        "camera_resolution": camera_resolution,
+        "camera_resolution": cam_res,
         "points": points
     }
     with open(out_fpath, "w") as f:
@@ -37,8 +38,9 @@ def load_points(fpath):
         points = np.array(list(data["points"].values()), dtype=np.float32)
         board_shape = tuple(data["board_shape"])
         board_edge_len = data["board_edge_len"]
-        camera_resolution = tuple(data["camera_resolution"])
-    return points, fnames, board_shape, board_edge_len, camera_resolution
+#         board_square_len = data["board_square_len"]
+        cam_res = tuple(data["camera_resolution"])
+    return points, fnames, board_shape, board_edge_len, cam_res
 
 
 def load_defined_points(fpath):
@@ -48,16 +50,16 @@ def load_defined_points(fpath):
         fnames = []
         for i in data['frame_idx']:
             fnames.append('img{}.jpg'.format(str(i).zfill(5)))
-        camera_resolution = tuple(data["camera_resolution"])
+        cam_res = tuple(data["camera_resolution"])
 
-    return points, fnames, camera_resolution
+    return points, fnames, cam_res
 
 
-def save_camera(out_fpath, camera_resolution, k, d):
+def save_camera(out_fpath, cam_res, k, d):
     created_timestamp = str(datetime.now())
     data = {
         "created_timestamp": created_timestamp,
-        "camera_resolution": camera_resolution,
+        "camera_resolution": cam_res,
         "k": k.tolist(),
         "d": d.tolist(),
     }
@@ -68,13 +70,13 @@ def save_camera(out_fpath, camera_resolution, k, d):
 def load_camera(fpath):
     with open(fpath, "r") as f:
         data = json.load(f)
-        camera_resolution = tuple(data["camera_resolution"])
+        cam_res = tuple(data["camera_resolution"])
         k = np.array(data["k"], dtype=np.float64)
         d = np.array(data["d"], dtype=np.float64)
-    return k, d, camera_resolution
+    return k, d, cam_res
 
 
-def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, camera_resolution):
+def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res):
     created_timestamp = str(datetime.now())
     cameras = []
     for k,d,r,t in zip(k_arr, d_arr, r_arr, t_arr):
@@ -86,7 +88,7 @@ def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, camera_resolution):
         })
     data = {
         "created_timestamp": created_timestamp,
-        "camera_resolution": camera_resolution,
+        "camera_resolution": cam_res,
         "cameras": cameras
     }
     with open(out_fpath, "w") as f:
@@ -96,7 +98,7 @@ def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, camera_resolution):
 def load_scene(fpath):
     with open(fpath, "r") as f:
         data = json.load(f)
-        camera_resolution = tuple(data["camera_resolution"])
+        cam_res = tuple(data["camera_resolution"])
         k_arr = []
         d_arr = []
         r_arr = []
@@ -110,7 +112,7 @@ def load_scene(fpath):
         d_arr = np.array(d_arr, dtype=np.float64)
         r_arr = np.array(r_arr, dtype=np.float64)
         t_arr = np.array(t_arr, dtype=np.float64)
-    return k_arr, d_arr, r_arr, t_arr, camera_resolution
+    return k_arr, d_arr, r_arr, t_arr, cam_res
 
 
 

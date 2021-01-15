@@ -55,16 +55,16 @@ def find_corners_images(filepaths: List[str], board_shape: Tuple[int, int], wind
     """
     corners = []
     found_filepaths = []
-    camera_resolution = None
+    cam_res = None
     for i, fp in enumerate(filepaths):
         img = cv2.imread(fp)
         if img is None:
             print(f"Couldn't read image: {fp}")
         else:
-            if camera_resolution is None:
-                camera_resolution = (img.shape[1], img.shape[0])
+            if cam_res is None:
+                cam_res = (img.shape[1], img.shape[0])
             else:
-                assert camera_resolution == (img.shape[1], img.shape[0])
+                assert cam_res == (img.shape[1], img.shape[0])
             img_corners = find_corners(fp, img, board_shape, window_size)
             if img_corners is not None:
                 corners.append(img_corners)
@@ -72,4 +72,4 @@ def find_corners_images(filepaths: List[str], board_shape: Tuple[int, int], wind
                 print(f"Found corners for file {i}: {fp}")
             else:
                 print(f"No corners found for file {i}: {fp}")
-    return np.array(corners, dtype=np.float32).reshape((-1, *board_shape, 2)), found_filepaths, camera_resolution
+    return np.array(corners, dtype=np.float32).reshape((-1, *board_shape, 2)), found_filepaths, cam_res
