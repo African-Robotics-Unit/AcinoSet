@@ -24,7 +24,7 @@ def get_frames(vid_fpath, frame_output_dir):
         winname = vid_fpath
         cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
         go_next = True
-        while True:
+        while cv2.getWindowProperty(winname, cv2.WND_PROP_VISIBLE) > 0:
             if go_next:
                 ret, frame = cap.read()
 
@@ -35,7 +35,7 @@ def get_frames(vid_fpath, frame_output_dir):
             else:
                 break
 
-            key = cv2.waitKey(0) & 0xFF
+            key = cv2.waitKey(10) & 0xFF
             if key == ord("."):
                 #cap.set(cv2.CAP_PROP_POS_FRAMES, curr_frame+48) # skip 50 frames
                 go_next = True
@@ -53,10 +53,16 @@ def get_frames(vid_fpath, frame_output_dir):
         print("Couldn't open", vid_fpath)
 
 
+def manual_label_v2():
+    from argus_gui import ClickerGUI
+    ClickerGUI()
+        
+        
 def manual_label(vid_fpaths, out_fpath):
     VideoLabelSession(vid_fpaths, out_fpath)
 
 
+# This needs much more improving!
 class VideoLabelSession(object):
 
     def __init__(self, video_filepaths, out_fpath):
@@ -142,7 +148,7 @@ class VideoLabelSession(object):
                 self.cleanup()
                 break
 
-            elif k == ord('a'):
+            elif k == ord('s'):
                 if self.frame_circles_saved is None:
                     self.frame_circles_saved = np.array([self.frame_circles.copy()])
                 else:

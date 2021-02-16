@@ -3,7 +3,8 @@ from typing import Tuple, Union
 from nptyping import Array
 import cv2
 from .utils import create_board_object_pts
-from .misc import global_positions, rotation_matrix_from_vectors, rot_z
+from .points import common_image_points
+from .misc import redescending_loss, global_positions, rotation_matrix_from_vectors, rot_z
 from scipy.sparse import lil_matrix
 from scipy.optimize import least_squares
 import time
@@ -66,8 +67,6 @@ def triangulate_points(img_pts_1, img_pts_2, k1, d1, r1, t1, k2, d2, r2, t2):
 def project_points(obj_pts, k, d, r, t):
     pts =  cv2.projectPoints(obj_pts, r, t, k, d)[0].reshape((-1, 2))
     return pts
-
-
 
 
 # ========== FISHEYE CAMERA MODEL ==========
@@ -139,70 +138,119 @@ def project_points_fisheye(obj_pts, k, d, r, t):
     return pts
 
 
-# this function is deprecated in favour of project_points_fisheye above, but remains here for educational purposes
-# also the same as traj_opt.pt3d_to_2d
-def project_3d_to_2d(pos_3d: np.ndarray, R: np.ndarray, T: np.ndarray, D: np.ndarray, K: np.ndarray):
-    """Projects a numpy array of 3D points (shape Nx3) onto the given camera's image plane.
-    Returns a numpy array of 2D points (shape Nx2) representing the pixel coordinates of the 3D point."""
-    #rotate and translate to camera frame
-    pos = pos_3d.reshape((-1, 3)).T #ensure points are column vectors
-    cam_pos = R @ pos + T
-    #project points onto camera plane
-    a = cam_pos[0]/cam_pos[2]
-    b = cam_pos[1]/cam_pos[2]
-    # fisheye
-    r = (a**2 + b**2)**0.5
-    th = np.arctan(r)
-    # fisheye distortion
-    th_D = th * (1 + D[0]*th**2 + D[1]*th**4 + D[2]*th**6 + D[3]*th**8)
-    # distorted points
-    x_P = (th_D/r)*a
-    y_P = (th_D/r)*b
-    # convert to pixel coordinates
-    h = np.array([K[0,0]*x_P + K[0,2], K[1,1]*y_P + K[1,2]], dtype=np.float32).T
-    return h
-
-
 # ========== ESTIMATION ALGORITHMS ==========
 
 
-def fix_skew_scene(cams, r_arr, t_arr):
-    cams = np.array(cams)
-    r_arr = np.array(r_arr)
-    t_arr = np.array(t_arr)
-
-    cam_sets = [cams[np.where(cams < 3)], cams[np.where(cams > 2)]]
-    z_vec = np.array([[0], [0], [1]])
-
-    # check if one of the cam sets have more than 1 cam
-    arr_lengths = np.array([len(cam_sets[0]),len(cam_sets[1])])
-    idx = np.where(arr_lengths>1)[0]
+def fix_skew_scene(cams, r_arr, t_arr, ave_cam_height=0.5):
+    # seperate cams list into side 1 & 2
+    cam_sets = [list(filter(lambda x: x<4, cams)), list(filter(lambda x: x>3, cams))]
+    cam_sets_len = np.array([len(cam_sets[0]),len(cam_sets[1])])
+     # check if one of the cam sets have more than 1 cam
+    idx = np.where(cam_sets_len > 1)[0]
     if len(idx):
         # get cams on the one side of the scene that forms a line
-        idxs = [cams.tolist().index(i) for i in cam_sets[idx[0]]]
+        idxs = [cams.index(i) for i in cam_sets[idx[0]]]
         positions = global_positions(r_arr, t_arr)[idxs].reshape(-1, 3)
-        # get vector that defines the best fit line
-        mean = positions.mean(axis=0)
-        *_, arr = np.linalg.svd(positions - mean)
-        line_vec = arr[0]
-        # align with x direction
-        x_vec = np.array([[1], [0], [0]])
-        R = rotation_matrix_from_vectors(line_vec, x_vec)
-        r_arr = np.array([r @ R.T for r in r_arr])
+        line_vec, *_ = np.linalg.svd(positions - positions.mean(axis=0))[-1] # best fit line vector
+        line_vec *= -1 if line_vec[0] < 0 else 1 # ensure positive x direction
+        R = rotation_matrix_from_vectors(np.array([[1, 0, 0]]).T, line_vec)
+        r_arr = [r @ R for r in r_arr] # align cams with x direction
 
     # check if cams lie on a plane
-    if len(cams)>2 and len(cam_sets[0]) and len(cam_sets[1]):
-        # ax + by + cz = d --> Ax=B where x is the plane normal: (a, b, c).T
+    z_vec = np.array([[0, 0, 1]]).T
+    if len(cams)>2 and cam_sets_len.all():
         positions = global_positions(r_arr, t_arr).reshape(-1, 3) # A
-        intercepts = np.ones((len(positions), 1)) # B
-        plane_normal = np.linalg.pinv(positions) @ intercepts # x = A^-1 @ B = (a, b, c)
-        # align camera plane with xy plane
-        R = rotation_matrix_from_vectors(plane_normal, z_vec)
-        r_arr = np.array([r @ R.T for r in r_arr])
+        *_, plane_normal = np.linalg.svd(positions - positions.mean(axis=0))[-1] # best fit plane
+        plane_normal *= -1 if plane_normal[-1] < 0 else 1 # ensure positive z direction
+        R = rotation_matrix_from_vectors(z_vec, plane_normal)
+        r_arr = [r @ R for r in r_arr] # align plane of cam positions with xy plane
 
-    # place cams half a meter above ground
-    height = 0.5*z_vec
-    t_arr = np.array([t - r @ height for r, t in zip(r_arr, t_arr)])
+    # place cams at a height above ground
+    t_arr = [t - ave_cam_height * r @ z_vec for r, t in zip(r_arr, t_arr)]
+    return r_arr, t_arr
+
+
+def adjust_extrinsics_manual_points(calib_func, img_pts_arr, cam_idxs_to_correct, k_arr, d_arr, r_arr, t_arr):
+    """ Performs Least Squares Minimization to correct the pose of misaligned cameras
+    :param scene_fpath: path to scene*.json file that holds the scene's extrinsics
+    :param manual_pts_fpath: path to file that hold the manually-obtained image points
+    :param cam_idxs_to_correct: the index/indices of the camera(s) whose pose(s) is/are to be corrected.
+    This variable must be either single integer or a 1D list of integers. Here, the cam's index corresponds
+    to its index in the scene*.json file.
+    :return extrinsic params k_arr, d_arr, r_arr, t_arr, cam_res
+    """
+    def residual_arr(R_t):
+        R = cv2.Rodrigues(R_t[0:3])[0] # convert fromm rodrigues vector to rotation matrix
+        t = R_t[3:6].reshape((3,1))
+
+        # for each skew cam pair
+        all_skew_3d_pts = []
+        for a, b in cam_pairs:
+            cam_a_params = [k_arr[a], d_arr[a]]
+            cam_a_params += [r_arr[a] @ R.T, t_arr[a] - r_arr[a] @ t] if a in cam_idxs_to_correct else [r_arr[a], t_arr[a]]
+            cam_b_params = [k_arr[b], d_arr[b]]
+            cam_b_params += [r_arr[b] @ R.T, t_arr[b] - r_arr[b] @ t] if b in cam_idxs_to_correct else [r_arr[b], t_arr[b]]
+
+            skew_3d_pts = triangulate_func(
+                np.array(img_pts_arr[:, a]), np.array(img_pts_arr[:, b]), 
+                *cam_a_params, *cam_b_params
+            )
+
+            all_skew_3d_pts.append(skew_3d_pts)
+
+        # reproject skew 3d pts into cam i's view and get array of reprojection errors
+        all_cams_reprojection_err = []
+        for i in range(n_cams):
+            cam_i_params = [k_arr[i], d_arr[i]]
+            cam_i_params += [r_arr[i] @ R.T, t_arr[i] - r_arr[i] @ t] if i in cam_idxs_to_correct else [r_arr[i], t_arr[i]]
+
+            for skew_3d_pts in all_skew_3d_pts:
+                reprojected_pts = project_func(skew_3d_pts, *cam_i_params)
+                reprojection_errs = img_pts_arr[:, i] - reprojected_pts
+
+                all_cams_reprojection_err.append([redescending_loss(e, 3, 10, 20) for e in reprojection_errs])
+
+        return np.array(all_cams_reprojection_err).flatten()
+
+    if calib_func == calibrate_pair_extrinsics_fisheye:
+        triangulate_func = triangulate_points_fisheye
+        project_func = project_points_fisheye
+        calib_type = 'fisheye'
+    else:
+        triangulate_func = triangulate_points
+        project_func = project_points
+        calib_type = ''
+
+    if type(cam_idxs_to_correct) is int:
+        cam_idxs_to_correct = [cam_idxs_to_correct]
+        msg = f"Cam with index {cam_idxs_to_correct} is to have its pose corrected."
+    else:
+        msg = f"Cams with indices {cam_idxs_to_correct} are to have their poses corrected"
+
+    n_cams = len(k_arr)
+    assert n_cams == img_pts_arr.shape[1], "Number of cams in intrinsic file differs from number of cams in manual points file"
+
+    cam_pairs = []
+    for i in cam_idxs_to_correct:
+        cam_pairs.append([(i-1) % n_cams, i])
+        cam_pairs.append([i, (i+1) % n_cams])
+    cam_pairs = np.unique(cam_pairs,axis=0).tolist() # remove duplicates
+
+    print(msg, "\nMinimizing error for", calib_type, "cam pairs with indices", cam_pairs, "...\n")
+
+    R0, t0 = np.identity(3), np.zeros(3)
+    R0_t0 = np.concatenate([cv2.Rodrigues(R0)[0].flatten(), t0]) # pack initial R_t
+
+    res = least_squares(residual_arr, R0_t0) # loss = linear (default)
+    print(res.message, f"success: {res.success}", f"func evals: {res.nfev}", f"cost: {res.cost}\n", sep="\n")
+
+    R = cv2.Rodrigues(res.x[0:3])[0] # convert fromm rodrigues vector to rotation matrix
+    t = res.x[3:6].reshape((3,1))
+
+    for cam_idx in cam_idxs_to_correct:
+        # adjust skew cam's extrinsics by a r and t in world frame
+        t_arr[cam_idx] -= r_arr[cam_idx] @ t # t_f = t_i - r_i @ t
+        r_arr[cam_idx] = r_arr[cam_idx] @ R.T # r_f = r_i @ r.T # r_arr[cam_idx] @= R.T not yet supported
 
     return r_arr, t_arr
 
@@ -220,34 +268,24 @@ def calibrate_pairwise_extrinsics(calib_func, img_pts_arr, fnames_arr, k_arr, d_
     t_arr[0] = np.array([[0, 0, 0]], dtype=np.float32).T
     # Get relative pairwise transformations between subsequent cameras
     print(f"Pairwise calibration using cam pairs {cam_pairs}\n")
-    for cam_pair in cam_pairs:
-        print(f"Calibrating cams {cam_pair[0]} & {cam_pair[1]}")
-        i, j = (cams.index(cam_pair[0]), cams.index(cam_pair[1]))
-        points_1 = img_pts_arr[i]
-        fnames_1 = fnames_arr[i]
-        points_2 = img_pts_arr[j]
-        fnames_2 = fnames_arr[j]
+    print("camera pair", 'common frames', 'RMS reprojection error', sep='\t')
+    incomplete_cams = []
+    for cam_a, cam_b in cam_pairs:
+        print(f"{cam_a} & {cam_b}", end='\t'*2)
+        i, j = cams.index(cam_a), cams.index(cam_b)
         # Extract common points between cameras into img_pts 1 & 2
-        img_pts_1 = []
-        img_pts_2 = []
-        for a, f in enumerate(fnames_1):
-            if f in fnames_2:
-                b = fnames_2.index(f)
-                img_pts_1.append(points_1[a])
-                img_pts_2.append(points_2[b])
-
-        print(f"Found {len(img_pts_1)} image frames common to cams {cam_pair[0]} & {cam_pair[1]}")
+        img_pts_1, img_pts_2, _ = common_image_points(img_pts_arr[i], fnames_arr[i], img_pts_arr[j], fnames_arr[j])
+        print(len(img_pts_1), end='\t'*2)
         if not len(img_pts_1):
-            r_arr[j] = np.array(dummy_scene_data['r'][cam_pair[1]])
-            t_arr[j] = np.array(dummy_scene_data['t'][cam_pair[1]])
-            print(f"Instead, R[{cam_pair[1]}] and T[{cam_pair[1]}] from dummy_scene.json were used\n")
+            r_arr[j] = np.array(dummy_scene_data['r'][cam_b-1])
+            t_arr[j] = np.array(dummy_scene_data['t'][cam_b-1])
+            print(f"\nInstead, R[{cam_b-1}] and T[{cam_b-1}] from dummy_scene.json were used for cam {cam_b}")
+            incomplete_cams.append(cam_b)
         else:
-            img_pts_1 = np.array(img_pts_1, dtype=np.float32)
-            img_pts_2 = np.array(img_pts_2, dtype=np.float32)
             # Create object points
             obj_pts = create_board_object_pts(board_shape, board_edge_len)
             rms, r, t = calib_func(obj_pts, img_pts_1, img_pts_2, k_arr[i], d_arr[i], k_arr[j], d_arr[j], cam_res)
-            print(f"RMS Reprojection Error: {rms}\n")
+            print("{:.5f} pixels".format(rms))
             # https://en.wikipedia.org/wiki/Camera_resectioning#Extrinsic_parameters
             # T is the world origin position in the camera coordinates.
             # The world position of the camera is C = -(R^-1)@T.
@@ -255,10 +293,8 @@ def calibrate_pairwise_extrinsics(calib_func, img_pts_arr, fnames_arr, k_arr, d_
             r_arr[j] = r @ r_arr[i] # matrix product
             t_arr[j] = r @ t_arr[i] + t
 
-    r_arr, t_arr = fix_skew_scene(cams, r_arr, t_arr)
-
-    print("Done!")
-    return r_arr, t_arr
+    print("\nDone!")
+    return r_arr, t_arr, incomplete_cams
 
 
 def create_bundle_adjustment_jacobian_sparsity_matrix(n_cameras, n_params_per_camera, camera_indices, n_points, point_indices):
@@ -445,7 +481,7 @@ def bundle_adjust_board_points_and_extrinsics(img_pts_arr, fnames_arr, board_sha
 
     return bundle_adjust_points_and_extrinsics(points_2d, points_3d, point_3d_indices, camera_indices, k_arr, d_arr, r_arr, t_arr, project_func)
 
-def bundle_adjust_board_points_and_extrinsics_with_defined_points(img_pts_arr, fnames_arr, defined_points, board_shape, k_arr, d_arr, r_arr, t_arr, triangulate_func, project_func):
+def bundle_adjust_board_points_and_extrinsics_with_manual_points(img_pts_arr, fnames_arr, manual_points, board_shape, k_arr, d_arr, r_arr, t_arr, triangulate_func, project_func):
     # (n_points, [x,y]), (n_3d_points, [x,y,z]), (3d_point_indics), (camera_indices)
     points_2d, points_3d, point_3d_indices, camera_indices = prepare_calib_board_data_for_bundle_adjustment(
         img_pts_arr, fnames_arr,
@@ -453,29 +489,29 @@ def bundle_adjust_board_points_and_extrinsics_with_defined_points(img_pts_arr, f
         k_arr, d_arr, r_arr, t_arr,
         triangulate_func
     )
-    defined_points_2d, defined_points_3d, defined_point_3d_indices, defined_camera_indices = prepare_manual_points_for_bundle_adjustment(
-        defined_points,
+    manual_points_2d, manual_points_3d, manual_point_3d_indices, manual_camera_indices = prepare_manual_points_for_bundle_adjustment(
+        manual_points,
         k_arr, d_arr, r_arr, t_arr,
         triangulate_func
     )
 
     # combine both data
-    points_2d = np.append(points_2d, defined_points_2d, axis=0)
-    points_3d = np.append(points_3d, defined_points_3d, axis=0)
-    point_3d_indices = np.append(point_3d_indices, defined_point_3d_indices + point_3d_indices.max(), axis=0)
-    camera_indices = np.append(camera_indices, defined_camera_indices, axis=0)
+    points_2d = np.append(points_2d, manual_points_2d, axis=0)
+    points_3d = np.append(points_3d, manual_points_3d, axis=0)
+    point_3d_indices = np.append(point_3d_indices, manual_point_3d_indices + point_3d_indices.max(), axis=0)
+    camera_indices = np.append(camera_indices, manual_camera_indices, axis=0)
 
     return bundle_adjust_points_and_extrinsics(points_2d, points_3d, point_3d_indices, camera_indices, k_arr, d_arr, r_arr, t_arr, project_func)
 
-def bundle_adjust_board_points_and_extrinsics_with_only_defined_points(defined_points, board_shape, k_arr, d_arr, r_arr, t_arr, triangulate_func, project_func):
+def bundle_adjust_board_points_and_extrinsics_with_only_manual_points(manual_points, board_shape, k_arr, d_arr, r_arr, t_arr, triangulate_func, project_func):
     # (n_points, [x,y]), (n_3d_points, [x,y,z]), (3d_point_indics), (camera_indices)
-    defined_points_2d, defined_points_3d, defined_point_3d_indices, defined_camera_indices = prepare_manual_points_for_bundle_adjustment(
-        defined_points,
+    manual_points_2d, manual_points_3d, manual_point_3d_indices, manual_camera_indices = prepare_manual_points_for_bundle_adjustment(
+        manual_points,
         k_arr, d_arr, r_arr, t_arr,
         triangulate_func
     )
 
-    return bundle_adjust_points_and_extrinsics(defined_points_2d, defined_points_3d, defined_point_3d_indices, defined_camera_indices, k_arr, d_arr, r_arr, t_arr, project_func)
+    return bundle_adjust_points_and_extrinsics(manual_points_2d, manual_points_3d, manual_point_3d_indices, manual_camera_indices, k_arr, d_arr, r_arr, t_arr, project_func)
 
 
 def bundle_adjust_points_and_extrinsics(points_2d, points_3d, point_3d_indices, camera_indices, k_arr, d_arr, r_arr, t_arr, project_func):

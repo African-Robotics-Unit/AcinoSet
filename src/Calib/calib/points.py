@@ -73,3 +73,20 @@ def find_corners_images(filepaths: List[str], board_shape: Tuple[int, int], wind
             else:
                 print(f"No corners found for file {i}: {fp}")
     return np.array(corners, dtype=np.float32).reshape((-1, *board_shape, 2)), found_filepaths, cam_res
+
+
+def common_image_points(pts_1, fnames_1, pts_2, fnames_2):
+    fnames = []
+    img_pts_1 = []
+    img_pts_2 = []
+    for a, f in enumerate(fnames_1):
+        if f in fnames_2:
+            b = fnames_2.index(f)
+            fnames.append(f)
+            img_pts_1.append(pts_1[a])
+            img_pts_2.append(pts_2[b])
+
+    img_pts_1 = np.array(img_pts_1, dtype=np.float32)
+    img_pts_2 = np.array(img_pts_2, dtype=np.float32)
+    return img_pts_1, img_pts_2, fnames
+
