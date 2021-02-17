@@ -1,0 +1,29 @@
+name: acinoset
+channels:
+  - conda-forge
+  - defaults
+  - pytorch
+dependencies:
+  - python=3.7.6
+  - pip
+  - numpy
+  - opencv
+  - nodejs
+  - jupyter
+  - jupyter_client
+  - jupyter_console
+  - jupyter_core
+  - jupyterlab
+  - pandas
+  - scipy
+  - sympy
+  - matplotlib
+  - pyqtgraph
+  - pyopengl
+  - ipopt=3.11.1
+
+  - pip:
+    - nptyping==0.3.1
+    - pyomo
+    - tables
+    - deeplabcut
