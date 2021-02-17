@@ -6,7 +6,7 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
  AcinoSet is a dataset of free-running cheetahs in the wild that contains 119,490 frames of multi-view synchronized high-speed video footage, camera calibration files and 8,522 human-annotated frames. We utilize markerless animal pose estimation with DeepLabCut to provide 2D keypoints (in the 119K frames). Then, we use three methods that serve as strong baselines for 3D pose estimation tool development: traditional sparse bundle adjustment, an Extended Kalman Filter, and a trajectory optimization-based method we call Full Trajectory Estimation. The resulting 3D trajectories, human-checked 3D ground truth, and an interactive tool to inspect the data is also provided. We believe this dataset will be useful for a diverse range of fields such as ecology, robotics, biomechanics, as well as computer vision.
 
 ### AcinoSet code by:
-- [Naoya Muramatsu](https://github.com/DenDen047) | [Daniel Joska](https://github.com/DJoska) | [Liam Clark](https://github.com/LiamClarkZA) | [Ricky Jericevich](https://github.com/@rickyjericevich)
+- [Liam Clark](https://github.com/LiamClarkZA) | [Ricky Jericevich](https://github.com/@rickyjericevich) | [Daniel Joska](https://github.com/DJoska) | [Naoya Muramatsu](https://github.com/DenDen047)
 
 ## Prerequisites
 
@@ -34,7 +34,7 @@ The following sections document how this was created by the code within this rep
 
 If you want to label more cheetah data, you can also do so within the [DeepLabCut framework](https://github.com/DeepLabCut/DeepLabCut). We provide a conda file for an easy-install, but please see the [repo](https://github.com/DeepLabCut/DeepLabCut) for installation and instructions for use.
 ```sh
-$ conda env create -f conda_envs/dDLC.yml -n DLC
+$ conda env create -f conda_envs/DLC.yml -n DLC
 ```
 
 #### Optionally: Manually Defining the Shared Points for 3D calibration:
@@ -66,11 +66,11 @@ $ python converter_argus.py \
     --data_dir ../data/2019_03_07/extrinsic_calib/videos
 ```
 
-### Intrinsic & Extrinsic Calibration:
+### Getting started with AcinoSet:
 
-Build the environment.
+Navigate to the AcinoSet folder and build the environment:
 ```sh
-$ conda env create --file conda_envs/cv.yml
+$ conda env create -f conda_envs/acinoset.yml -n acinoset
 ```
 
 Launch Jupyter Lab:
@@ -78,15 +78,11 @@ Launch Jupyter Lab:
 $ jupyter lab
 ```
 
+### Intrinsic & Extrinsic Calibration:
+
 Run `calib_with_gui.ipynb`, and follow the instructions.
 
-
 ### Full Trajectory Optimization:
-
-Prepare the environment.
-```sh
-$ pyenv local anaconda3-5.2.0/envs/cv
-```
 
 Run `full_traj_opt.py`, or use the supplied Jupyter Notebook:
 ```sh
