@@ -1,18 +1,17 @@
-# This program converts the output data of Argus Clicker to the data for SBA.
-import os, sys
-import glob
-import pandas as pd
-import yaml
-from pprint import pprint
+# This program converts the output data of Argus Clicker to the points format for AcinoSet.
+import os
+from glob import glob
+from pandas import read_csv
+from yaml import safe_load
 import numpy as np
 from datetime import datetime
 import json
-import argparse
+from argparse import ArgumentParser
 
 
 # DATA_DIR = '../data/27_02_2019/extrinsic_calib/defined_points'
 
-parser = argparse.ArgumentParser(description='')
+parser = ArgumentParser(description='')
 parser.add_argument(
     '--data_dir',
     type=str,
@@ -36,13 +35,13 @@ args = parser.parse_args()
 if __name__ == "__main__":
     cam_res = [args.cam_res_w, args.cam_res_h]
     # load input data
-    argus_point_fpath = glob.glob(os.path.join(args.data_dir, '*-xypts.csv'))[0]
-    argus_points = pd.read_csv(argus_point_fpath)
-    argus_config_fpath = glob.glob(os.path.join(args.data_dir, '*-config.yaml'))[0]
+    argus_point_fpath = glob(os.path.join(args.data_dir, '*-xypts.csv'))[0]
+    argus_points = read_csv(argus_point_fpath)
+    argus_config_fpath = glob(os.path.join(args.data_dir, '*-config.yaml'))[0]
     with open(argus_config_fpath, 'r') as f:
-        argus_config = yaml.safe_load(f)
-    argus_res_fpath = glob.glob(os.path.join(args.data_dir, '*-xyzres.csv'))[0]
-    argus_res = pd.read_csv(argus_res_fpath)
+        argus_config = safe_load(f)
+    argus_res_fpath = glob(os.path.join(args.data_dir, '*-xyzres.csv'))[0]
+    argus_res = read_csv(argus_res_fpath)
 
     # params
     n_cameras = len(argus_config[0]['videos'])
@@ -71,14 +70,14 @@ if __name__ == "__main__":
             frame_idx.append(row_idx)
 
     result = {
-        'created_timestamp': str(datetime.now()),
+        'timestamp': str(datetime.now()),
         'camera_resolution': cam_res,
         'points': points,
         'frame_idx': frame_idx
     }
 
     # output converted data
-    output_fpath = os.path.join(args.data_dir, 'defined_points.json')
+    output_fpath = os.path.join(args.data_dir, 'manual_points.json')
     with open(output_fpath, "w") as write_file:
         json.dump(result, write_file)
     print(f'Success to output into {output_fpath}')
