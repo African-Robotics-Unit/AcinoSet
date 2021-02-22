@@ -5,6 +5,8 @@ from nptyping import Array
 from datetime import datetime
 import json
 import os
+from glob import glob
+import errno
 
 
 def create_board_object_pts(board_shape: Tuple[int, int], square_edge_length: np.float32) -> Array[np.float32, ..., 3]:
@@ -115,7 +117,7 @@ def load_scene(fpath):
     return k_arr, d_arr, r_arr, t_arr, cam_res
 
 
-def create_dlc_points_2d_file(dlc_df_fpaths):
+def load_dlc_points_as_df(dlc_df_fpaths):
     dfs = []
     for path in dlc_df_fpaths:
         dlc_df = pd.read_hdf(path)
@@ -131,3 +133,26 @@ def create_dlc_points_2d_file(dlc_df_fpaths):
 
     dlc_df = dlc_df[['frame', 'camera', 'marker', 'x', 'y', 'likelihood']]
     return dlc_df
+
+
+def find_scene_file(dir_path, scene_fname=None, suppress_output=False):
+    if not scene_fname:
+        n_cams = len(glob(os.path.join(dir_path, "cam[1-9].mp4"))) # reads up to cam9.mp4 only
+        scene_fname = f"{n_cams}_cam_scene_sba.json" if n_cams else "[1-9]_cam_scene*.json"
+
+    if dir_path and dir_path != os.path.join("..", "data"):
+        scene_fpath = os.path.join(dir_path, "extrinsic_calib", scene_fname)
+        scene_files = [scene_file for scene_file in glob(scene_fpath) if "before_corrections" not in scene_file ]
+
+        if scene_files:
+            k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_files[-1])
+            if not suppress_output:
+                print("Loaded extrinsics from", scene_files[-1])
+            scene_fname = os.path.basename(scene_files[-1])
+            n_cams = int([j for j in scene_fname if j.isdigit()][0])
+            return k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath
+        else:
+            return find_scene_file(os.path.dirname(dir_path), scene_fname, suppress_output)
+
+    raise FileNotFoundError(
+        errno.ENOENT, os.strerror(errno.ENOENT), os.path.join("extrinsic_calib", scene_fname))

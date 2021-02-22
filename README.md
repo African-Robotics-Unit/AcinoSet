@@ -30,14 +30,14 @@ The following sections document how this was created by the code within this rep
 - [ ] You can use the `full_cheetah` model provided in the [DLC Model Zoo](http://modelzoo.deeplabcut.org)  To re-create the H5 files (or on new videos). 
 - Here, we also already provide the videos and H5 outputs of all frames, [here]().
 
-##### Labelling Cheetah Body Positions:
+### Labelling Cheetah Body Positions:
 
 If you want to label more cheetah data, you can also do so within the [DeepLabCut framework](https://github.com/DeepLabCut/DeepLabCut). We provide a conda file for an easy-install, but please see the [repo](https://github.com/DeepLabCut/DeepLabCut) for installation and instructions for use.
 ```sh
 $ conda env create -f conda_envs/DLC.yml -n DLC
 ```
 
-### Getting started with AcinoSet:
+### Camera Calibration and 3D Reconstruction:
 
 Navigate to the AcinoSet folder and build the environment:
 ```sh
@@ -49,15 +49,15 @@ Launch Jupyter Lab:
 $ jupyter lab
 ```
 
-### Intrinsic & Extrinsic Calibration:
+#### Intrinsic & Extrinsic Calibration:
 
 Run `calib_with_gui.ipynb`, and follow the instructions.
 
-Otherwise, open saveMatlabPointsForAcinoSet.m in MATLAB and follow the instructions. This method generally yields superior extrinsic calibration results, but the downside is that it requires MATLAB 2020b or later.
+Alternatively, if the checkerboard points detected in `calib_with_gui.ipynb` are unsatisfactory, open `saveMatlabPointsForAcinoSet.m` in MATLAB and follow the instructions. Note that this requires MATLAB 2020b or later.
 
-#### Optionally: Manually Defining the Shared Points for extrinsic calibration:
+##### Optionally: Manually Defining the Shared Points for extrinsic calibration:
 
-You can manually define points on each video in a scene with [Argus](http://argus.web.unc.edu/). Documentation is [here](http://argus.web.unc.edu/tutorial/#Clicker).
+You can manually define points on each video in a scene with [Argus](http://argus.web.unc.edu/). A quick tutorial is found [here](http://argus.web.unc.edu/tutorial/#Clicker).
 
 Build the environment:
 ```sh
@@ -70,11 +70,9 @@ $ python
 >>> import argus_gui as ag; ag.ClickerGUI()
 ```
 
-Keyboard Shortcuts:
+Keyboard Shortcuts (See documentation [here](http://argus.web.unc.edu/wp-content/uploads/sites/9976/2019/01/Argus-Documentation_1.1.pdf) for more):
 - `G` ... to a specific frame
 - `X` ... to switch the sync mode setting the windows to the same frame
-- `A` ... to use the auto-tracker
-- `7`, `Y`, `U`, `I` ... growing the view finder at the bottom right
 - `O` ... to bring up the options dialog
 - `S` ... to bring up a save dialog
 
@@ -84,7 +82,7 @@ $ python argus_converter.py \
     --data_dir ../data/2019_03_07/extrinsic_calib/argus_folder
 ```
 
-### Full Trajectory Optimization:
+#### Full Trajectory Estimation:
 
 Run `full_traj_opt.py`, or use the supplied Jupyter Notebook:
 ```sh

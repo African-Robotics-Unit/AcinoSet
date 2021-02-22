@@ -1,3 +1,4 @@
+import os
 import sys 
 import numpy as np
 import cv2
@@ -15,12 +16,9 @@ import matplotlib.pyplot as plt
 from matplotlib import collections  as mc
 
 from .calib import project_points_fisheye
-from .app import triangulate_points_fisheye
-from .points import common_image_points
 from .utils import create_board_object_pts, \
     load_scene, \
-    load_points, \
-    load_manual_points
+    find_scene_file
 
 def create_camera(color=[0.1]*3):
     ## plot camera
@@ -110,18 +108,19 @@ def plot_calib_board(img_points, board_shape, camera_resolution, frame_fpath=Non
 
 
 class Animation:
-    def __init__(self, title, scene_fpath, dark_mode=False):
+    def __init__(self, title, data_dir, centered=False, dark_mode=False):
         self.app = QApplication.instance()
         if self.app == None:
             self.app = QApplication([])
-            
+        
+        self.centered = False if "Scene" in title else centered
         self.dark_mode = dark_mode
+        self.screen_res = self.app.desktop().screenGeometry()
+        self.screen_res = np.array([self.screen_res.width(), self.screen_res.height()])
+        
         theme_colors = ['w','k']
         pyqtgraph.setConfigOption('background', theme_colors[dark_mode])
         pyqtgraph.setConfigOption('foreground', theme_colors[not dark_mode])
-        
-        self.screen_res = self.app.desktop().screenGeometry()
-        self.screen_res = np.array([self.screen_res.width(), self.screen_res.height()])
         
         self.win = pyqtgraph.GraphicsWindow(title=title, size=self.screen_res/2)
         self.layout = QGridLayout()
@@ -131,25 +130,26 @@ class Animation:
         self.view.setBackgroundColor([255*(not dark_mode)]*3)
 #         self.view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.view.opts['distance']=15
+        self.view.orbit(-135,10)
         
         # camera pose
-        self.k_arr, self.d_arr, self.r_arr, self.t_arr, self.cam_res = load_scene(scene_fpath)
-#         self.d_arr = self.d_arr.reshape((-1,4))
-        self.n_cams = len(self.k_arr)
+        self.k_arr, self.d_arr, self.r_arr, self.t_arr, self.cam_res, self.n_cams, self.scene_fpath = find_scene_file(data_dir)
         self.cam_pos = []
         
-        for r, t in zip(self.r_arr, self.t_arr):
-            self.plot_camera(r, t)
-        
-        # grid
-        scene_center = np.mean(self.cam_pos, axis=0)
-        scene_center[2] = 0
         grid = gl.GLGridItem(size=QtGui.QVector3D(50,50,0), color=[abs(55-255*(not dark_mode))]*3)
-        grid.translate(*scene_center)
         self.view.addItem(grid)
         
-        self.view.pan(*scene_center)
-        self.view.orbit(-135,10)
+        if not self.centered:
+            for r, t in zip(self.r_arr, self.t_arr):
+                self.plot_camera(r, t)
+
+            scene_center = np.mean(self.cam_pos, axis=0)
+            scene_center[2] = 0
+            grid.translate(*scene_center)
+            self.view.pan(*scene_center)
+        else:
+            grid.translate(0,0,-0.5)
+
         
     def rodrigues_to_vec(self, r):
         ang = 180 / np.pi * np.linalg.norm(r)
@@ -181,8 +181,8 @@ class Animation:
 
 
 class Scene(Animation):
-    def __init__(self, scene_fpath, **kwargs):
-        Animation.__init__(self, "Scene Reconstruction", scene_fpath, **kwargs)
+    def __init__(self, data_dir, **kwargs):
+        Animation.__init__(self, "Scene Reconstruction", data_dir, **kwargs)
         self.layout.addWidget(self.view, 0, 0, 1, 1)
         
     def plot_calib_board(self, r, t, board_shape, board_edge_len):
@@ -197,69 +197,14 @@ class Scene(Animation):
         scatter = gl.GLScatterPlotItem(pos=points, color=color, size=size if size else self.screen_res[0]/500, pxMode=True)
         scatter.setGLOptions('translucent')
         self.view.addItem(scatter)
-
-        
-def plot_scene(scene_fpath, points_fpaths, cam_pairs=None, plot_defined_pts=False, **kwargs):
-    
-    k_arr, d_arr, r_arr, t_arr, _ = load_scene(scene_fpath)
-    n_cams = len(k_arr)
-    scene = Scene(scene_fpath, **kwargs)
-    
-    colors = [
-        [1,0,0],                       # red: cam pair 0&1
-        [0,1,0],                       # greeen: cam pair 1&2
-        [kwargs.get('dark_mode',0)]*3, # white if dark_mode else black: cam pair 2&3
-        [0,0,1],                       # blue: cam pair 3&4
-        [0,0.8,0.8],                   # light blue: cam pair 4&5
-        [1,0,1]                        # fuchsia/magenta: cam pair 5&0
-    ]
-    for i in range(len(colors)):
-        colors[i] += [1] # add transparency channel to colors to avoid error msg
-        
-    # If cam pairs are not specified, plot all
-    if cam_pairs is None:
-        cam_pairs = []
-        for cam in range(n_cams):
-            cam_pairs.append(sorted([cam%n_cams, (cam+1)%n_cams]))
-            
-    if plot_defined_pts:
-        pts_2d, *_ = load_manual_points(points_fpaths)
-            
-    for i in cam_pairs:
-        if plot_defined_pts:
-            img_pts_1, img_pts_2 = np.array(pts_2d[:, i[0]]), np.array(pts_2d[:, i[1]])
-        else:
-            pts_1, names_1, *_ = load_points(points_fpaths[i[0]])
-            pts_2, names_2, *_ = load_points(points_fpaths[i[1]])
-            img_pts_1, img_pts_2, _ = common_image_points(pts_1, names_1, pts_2, names_2)
-            
-        try:
-            pts_3d = triangulate_points_fisheye(
-                img_pts_1, img_pts_2, 
-                k_arr[i[0]], d_arr[i[0]], r_arr[i[0]], t_arr[i[0]],
-                k_arr[i[1]], d_arr[i[1]], r_arr[i[1]], t_arr[i[1]]
-            )
-            scene.plot_points(pts_3d, color=colors[cam_pairs.index(i)])
-        except:
-            msg = "Could not triangulate points" if len(img_pts_1) else "No points exist"
-            print(msg, f"for cam pair with indices {i}")
-    
-    scene.show()
-    
-def plot_checkerboard_pts(scene_fpath, points_fpaths, **kwargs):
-    plot_scene(scene_fpath, points_fpaths, **kwargs)
-
-def plot_all_defined_pts(scene_fpath, defined_points_fpath, **kwargs):
-    plot_scene(scene_fpath, defined_points_fpath, plot_defined_pts=True, **kwargs)
-    
-def plot_defined_pts_certain_pairs(scene_fpath, defined_points_fpath, cam_pairs, **kwargs):
-    plot_scene(scene_fpath, defined_points_fpath, cam_pairs, plot_defined_pts=True, **kwargs)
     
     
 class Cheetah(Animation):
-    def __init__(self, scatter_frames, scene_fpath, **kwargs):
-        Animation.__init__(self, "Cheetah Reconstruction", scene_fpath, **kwargs)
-        self.scatter_frames = np.array(scatter_frames)
+    """ Plots a reconstruction of a cheetah
+    :param scatter_frames: array the 3d positions of the dlc markers (joint positions and lure) with shape (. Use Cheetah(fte_positions, data_dir) to plot a single reconstruction (fte in thgis example). 
+    """
+    def __init__(self, scatter_frames, data_dir, reprojections=True, **kwargs):
+        Animation.__init__(self, "Cheetah Reconstruction", data_dir, **kwargs)
         
         # indices correspond to joints in 'markers' variable
         lines_idxs = [0,1,0,2,1,2,1,3,0,3,2,3,3,4,4,5,5,6,6,7,
@@ -267,8 +212,18 @@ class Cheetah(Animation):
                       3,11,4,11,11,12,12,13, # right front leg
                       4,14,5,14,14,15,15,16,
                       4,17,5,17,17,18,18,19]
-        lines_frames = [frame[lines_idxs, :] for frame in scatter_frames]
-        self.lines_frames = np.array(lines_frames)
+#         lines_frames = [frame[lines_idxs, :] for frame in scatter_frames]
+        self.scatter_frames = []
+        self.lines_frames = []
+        for frame in scatter_frames:
+            if self.centered:
+                dots_ave = np.nanmean(frame, axis=0)
+                frame -= dots_ave
+            self.scatter_frames.append(frame)
+            self.lines_frames.append(frame[lines_idxs, :])
+        
+        self.scatter_frames = np.array(self.scatter_frames)
+        self.lines_frames = np.array(self.lines_frames)
         self.n_frames = len(scatter_frames)
         self.frame = 0
         
@@ -285,59 +240,61 @@ class Cheetah(Animation):
         self.view.addItem(self.lines)
         
         # ====== 2D ======
-        self.cam_data = []
-        self.cam_lines = []
-        cam_w = []
-        for i in range(self.n_cams):
-            cam_w.append(pyqtgraph.PlotWidget())
-#             cam_w.append(pyqtgraph.PlotWidget(color=[0]*3))
-            self.cam_data.append(pyqtgraph.PlotDataItem(connect="pairs", name=f"Cam {i+1} Reprojection"))
-#             self.cam_data.append(pyqtgraph.PlotDataItem(connect="pairs", pen=pyqtgraph.mkPen("000000")))
-            cam_w[i].getPlotItem().addItem(self.cam_data[i])
-            cam_w[i].getPlotItem().setXRange(0, self.cam_res[0])
-            cam_w[i].getPlotItem().setYRange(self.cam_res[1], 0)
-            cam_w[i].getPlotItem().invertY()
-            cam_w[i].getPlotItem().addLegend() # the legend doesn't show for some reason
+        if self.centered and reprojections:
+            print("Reprojections are not permitted in centered mode")
+        self.reprojections = False if self.centered else reprojections
+        if self.reprojections:
+            self.cam_data = []
+            self.cam_lines = []
+            cam_w = []
+            for i in range(self.n_cams):
+                cam_w.append(pyqtgraph.PlotWidget())
+    #             cam_w.append(pyqtgraph.PlotWidget(color=[0]*3))
+                self.cam_data.append(pyqtgraph.PlotDataItem(connect="pairs", name=f"Cam {i+1} Reprojection"))
+    #             self.cam_data.append(pyqtgraph.PlotDataItem(connect="pairs", pen=pyqtgraph.mkPen("000000")))
+                cam_w[i].getPlotItem().addItem(self.cam_data[i])
+                cam_w[i].getPlotItem().setXRange(0, self.cam_res[0])
+                cam_w[i].getPlotItem().setYRange(self.cam_res[1], 0)
+                cam_w[i].getPlotItem().invertY()
+                cam_w[i].getPlotItem().addLegend() # the legend doesn't show for some reason
 
-            cam_w[i].sizeHint = lambda: pyqtgraph.QtCore.QSize(self.screen_res[0]/7, self.screen_res[1]/7)
-            cam_w[i].setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            cam_w[i].setBackground([255*(not self.dark_mode)]*3)
-            
-            self.layout.addWidget(cam_w[i], i, 1, 1, 1)
-            cam_lines_temp = []
-            for j in range(self.n_frames):
-                cam_params = [self.k_arr[i], self.d_arr[i], self.r_arr[i], self.t_arr[i]]
-                lines_frames_2d = [project_points_fisheye(pt, *cam_params)[0] for pt in self.lines_frames[j]]
-                cam_lines_temp.append(lines_frames_2d)
-            self.cam_lines.append(np.array(cam_lines_temp))
-            self.cam_data[i].setData(self.cam_lines[i][0])
+                cam_w[i].sizeHint = lambda: pyqtgraph.QtCore.QSize(self.screen_res[0]/7, self.screen_res[1]/7)
+                cam_w[i].setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+                cam_w[i].setBackground([255*(not self.dark_mode)]*3)
+
+                self.layout.addWidget(cam_w[i], i, 1, 1, 1)
+                
+                cam_lines_temp = []
+                for j in range(self.n_frames):
+                    cam_params = [self.k_arr[i], self.d_arr[i], self.r_arr[i], self.t_arr[i]]
+                    lines_frames_2d = [project_points_fisheye(pt, *cam_params)[0] for pt in self.lines_frames[j]]
+                    cam_lines_temp.append(lines_frames_2d)
+                self.cam_lines.append(np.array(cam_lines_temp))
+                self.cam_data[i].setData(self.cam_lines[i][0])
 
     def update(self):
         dots = self.scatter_frames[self.frame]
         links = self.lines_frames[self.frame]
         
-#         if centered:
-#             dots -= self.scatter_frames[self.frame][0]
-#             links -= self.lines_frames[self.frame][0]
+#         if self.centered:
+#             dots_ave = np.nanmean(dots,axis=0)
+#             dots -= dots_ave
+#             links -= dots_ave
+# #             dots -= self.scatter_frames[self.frame][0]
+# #             links -= self.lines_frames[self.frame][0]
+        if self.reprojections:
+            for i in range(self.n_cams):
+                self.cam_data[i].setData(self.cam_lines[i][self.frame])
         
         self.scatter.setData(pos=dots)
         self.lines.setData(pos=links)
         
-        self.frame = (self.frame+1)%self.n_frames
-        for i in range(self.n_cams):
-            self.cam_data[i].setData(self.cam_lines[i][self.frame])
+        self.frame = (self.frame+1) % self.n_frames
 
     def animation(self):
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update)
         timer.start(100) # speed of reconstruction
-        self.show()
-        
-    def plot(self, frames):
-        self.scatter.setData(pos=self.scatter_frames[frames].reshape(-1, 3))
-        self.lines.setData(pos=self.lines_frames[frames].reshape(-1, 3))
-        for i in range(self.n_cams):
-            self.cam_data[i].setData(self.cam_lines[i][frames].reshape(-1, 2))
         self.show()
         
 

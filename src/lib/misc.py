@@ -80,3 +80,18 @@ def rot_z(z: np.float32):
         [0, 0, 1]
     ], dtype=np.float32)
 
+def get_markers(include_lure=False):
+    markers = [
+        "l_eye", "r_eye", "nose",
+        "neck_base", "spine",
+        "tail_base", "tail1", "tail2",
+        "l_shoulder", "l_front_knee", "l_front_ankle",
+        "r_shoulder", "r_front_knee", "r_front_ankle",
+        "l_hip", "l_back_knee", "l_back_ankle",
+        "r_hip", "r_back_knee", "r_back_ankle",
+    ]
+    
+    if include_lure:
+        markers += ["lure"]
+        
+    return markers

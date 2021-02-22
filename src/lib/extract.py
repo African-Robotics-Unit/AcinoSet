@@ -4,12 +4,13 @@ import os
 import colorsys
 import json
 
-def draw_text(img, text):
-    font = cv2.FONT_HERSHEY_DUPLEX
-    bottomLeftCornerOfText = (10, 60)
-    fontScale = 2
-    fontColor = (255, 255, 255)
-    lineType = 2
+def draw_text(img, text, move_text_lower_pixels=0, fontColor = [255]*3):
+    fontScale = img.shape[0]/750
+    scale = fontScale/2
+    bottomLeftCornerOfText = (int(10*scale), int((60+move_text_lower_pixels)*scale))
+    font = cv2.FONT_HERSHEY_DUPLEX # cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = img.shape[0]/750
+    lineType = 4
 
     cv2.putText(img, text,
                 bottomLeftCornerOfText,
@@ -185,12 +186,3 @@ class VideoLabelSession(object):
     def cleanup(self):
         cv2.destroyAllWindows()
         cv2.waitKey(1)
-
-
-
-if __name__ == "__main__":
-    # get_frames("/home/liam/Desktop/05_03_2019/Extrinsic Calibration/Calibration Videos/05_03_2019Calibration_CAM6.mp4",
-    #            "/home/liam/Desktop/05_03_2019/Extrinsic Calibration/extracted_frames/6")
-    # manual_label([f"/home/liam/Desktop/27_02_2019/Extrinsic Calibration/Calibration Videos/Calibration Videos 1/27_02_2019Calibration_CAM{i}.mp4" for i in [1,2,3,4,5,6]],
-    #              "/home/liam/Desktop/27_02_2019/Extrinsic Calibration/manual_points.json")
-    pass
