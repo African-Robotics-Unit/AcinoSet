@@ -19,7 +19,7 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 - 119,490 processed frames with 2D keypoint estimation outputs [(H5 files as in the DLC format, and raw video)](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1) 
     - this is currently organized by date > animal ID > "run/attempt"
 - [3D files that are processed using our FTE baseline model](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1). These can be used for 3D GT.
-   - these files are called `traj_opt.pickle`, have a related `scene_sba.json` file, and can be loaded in the GUI.
+   - these files are called `fte.pickle`, have a related `n_cam_scene_sba.json` file, and can be loaded in the GUI.
 - A GUI to inspect the 3D dataset, which can be found [here](https://github.com/African-Robotics-Unit/acinoset_viewer)
 
 
@@ -37,16 +37,34 @@ If you want to label more cheetah data, you can also do so within the [DeepLabCu
 $ conda env create -f conda_envs/DLC.yml -n DLC
 ```
 
-#### Optionally: Manually Defining the Shared Points for 3D calibration:
+### Getting started with AcinoSet:
 
-You can manually define points on each video with [Argus](http://argus.web.unc.edu/). Documentation is [here](http://argus.web.unc.edu/tutorial/#Clicker).
+Navigate to the AcinoSet folder and build the environment:
+```sh
+$ conda env create -f conda_envs/acinoset.yml
+```
+
+Launch Jupyter Lab:
+```sh
+$ jupyter lab
+```
+
+### Intrinsic & Extrinsic Calibration:
+
+Run `calib_with_gui.ipynb`, and follow the instructions.
+
+Otherwise, open saveMatlabPointsForAcinoSet.m in MATLAB and follow the instructions. This method generally yields superior extrinsic calibration results, but the downside is that it requires MATLAB 2020b or later.
+
+#### Optionally: Manually Defining the Shared Points for extrinsic calibration:
+
+You can manually define points on each video in a scene with [Argus](http://argus.web.unc.edu/). Documentation is [here](http://argus.web.unc.edu/tutorial/#Clicker).
 
 Build the environment:
 ```sh
-$ conda env create -f conda_envs/argus.yml -n argus
+$ conda env create -f conda_envs/argus.yml
 ```
 
-Launch Argus/Clicker:
+Launch Argus Clicker:
 ```sh
 $ python
 >>> import argus_gui as ag; ag.ClickerGUI()
@@ -62,25 +80,9 @@ Keyboard Shortcuts:
 
 Then you must convert the output data from Argus to work with the rest of the pipeline (here is an example):
 ```sh
-$ python converter_argus.py \
-    --data_dir ../data/2019_03_07/extrinsic_calib/videos
+$ python argus_converter.py \
+    --data_dir ../data/2019_03_07/extrinsic_calib/argus_folder
 ```
-
-### Getting started with AcinoSet:
-
-Navigate to the AcinoSet folder and build the environment:
-```sh
-$ conda env create -f conda_envs/acinoset.yml -n acinoset
-```
-
-Launch Jupyter Lab:
-```sh
-$ jupyter lab
-```
-
-### Intrinsic & Extrinsic Calibration:
-
-Run `calib_with_gui.ipynb`, and follow the instructions.
 
 ### Full Trajectory Optimization:
 
@@ -95,4 +97,3 @@ $ python full_traj_opt.py \
 ```
 
 If you want to view the 3D animation, run `FTE.ipynb` and follow the instructions!
-
