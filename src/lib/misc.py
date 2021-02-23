@@ -1,4 +1,5 @@
 import numpy as np
+import sympy as sp
 
 def redescending_loss(err, a, b, c):
     #OUTLIER REJECTING COST FUNCTION (REDESCENDING LOSS)
@@ -51,34 +52,47 @@ def rotation_matrix_from_vectors(u,v):
     return np.dot(B, np.linalg.inv(A))
 
 
-def rot_x(x: np.float32):
-    c = np.cos(x)
-    s = np.sin(x)
-    return np.array([
-        [1, 0, 0],
-        [0, c, s],
-        [0, -s, c]
-    ], dtype=np.float32)
+def rot_x(x):
+    if isinstance(x, sp.Expr):
+        c = sp.cos(x)
+        s = sp.sin(x)
+        func = sp.Matrix
+    else:
+        c = np.cos(x)
+        s = np.sin(x)
+        func = np.array
+    return func([[1, 0, 0],
+                 [0, c, s],
+                 [0, -s, c]])
 
 
-def rot_y(y: np.float32):
-    c = np.cos(y)
-    s = np.sin(y)
-    return np.array([
-        [c, 0, -s],
-        [0, 1, 0],
-        [s, 0, c]
-    ], dtype=np.float32)
+def rot_y(y):
+    if isinstance(y, sp.Expr):
+        c = sp.cos(y)
+        s = sp.sin(y)
+        func = sp.Matrix
+    else:
+        c = np.cos(y)
+        s = np.sin(y)
+        func = np.array
+    return func([[c, 0, -s],
+                 [0, 1, 0],
+                 [s, 0, c]])
 
 
-def rot_z(z: np.float32):
-    c = np.cos(z)
-    s = np.sin(z)
-    return np.array([
-        [c, s, 0],
-        [-s, c, 0],
-        [0, 0, 1]
-    ], dtype=np.float32)
+def rot_z(z):
+    if isinstance(z, sp.Expr):
+        c = sp.cos(z)
+        s = sp.sin(z)
+        func = sp.Matrix
+    else:
+        c = np.cos(z)
+        s = np.sin(z)
+        func = np.array
+    return func([[c, s, 0],
+                 [-s, c, 0],
+                 [0, 0, 1]])
+
 
 def get_markers(include_lure=False):
     markers = [
