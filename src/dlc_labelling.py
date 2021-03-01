@@ -6,7 +6,6 @@ from pathlib import Path
 import sys
 import os
 import glob
-from pprint import pprint
 
 # HACKY FIX FOR SOME DLC BUG
 from PIL import ImageFile
@@ -40,7 +39,7 @@ parser.add_argument('--dlc_dir', type=str, default='/data/dlc/Cheetah-UCT-2019-1
 parser.add_argument('--iteration', type=int, default=18, help='the number of iterations you want to use')
 parser.add_argument('--video_type', type=str, default='mp4', help='the extension of videos')
 args = parser.parse_args()
-pprint(args)
+print(args)
 
 
 args.config = os.path.join(args.dlc_dir, 'config.yaml')

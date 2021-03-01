@@ -1,15 +1,15 @@
 # This program converts the output data of Argus Clicker to the points format for AcinoSet.
 import os
-from glob import glob
-from pandas import read_csv
-from yaml import safe_load
-import numpy as np
-from datetime import datetime
 import json
+import numpy as np
+from glob import glob
+from yaml import safe_load
+from pandas import read_csv
+from datetime import datetime
 from argparse import ArgumentParser
 
 
-# DATA_DIR = '../data/27_02_2019/extrinsic_calib/defined_points'
+# DATA_DIR = '../data/27_02_2019/extrinsic_calib/points/Argus'
 
 parser = ArgumentParser(description='')
 parser.add_argument(

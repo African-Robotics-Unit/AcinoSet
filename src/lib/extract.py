@@ -52,18 +52,13 @@ def get_frames(vid_fpath, frame_output_dir):
         cv2.destroyAllWindows()
     else:
         print("Couldn't open", vid_fpath)
-
-
-def manual_label_v2():
-    from argus_gui import ClickerGUI
-    ClickerGUI()
         
         
 def manual_label(vid_fpaths, out_fpath):
     VideoLabelSession(vid_fpaths, out_fpath)
 
 
-# This needs much more improving!
+# This is a WIP!
 class VideoLabelSession(object):
 
     def __init__(self, video_filepaths, out_fpath):

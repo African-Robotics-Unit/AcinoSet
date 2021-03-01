@@ -1,13 +1,12 @@
+import json
 import numpy as np
+import cv2 as cv
 from typing import Tuple, Union
 from nptyping import Array
-import cv2
-from .utils import create_board_object_pts, save_scene, \
-    load_camera, load_points, load_manual_points
-from .points import common_image_points
-from .misc import redescending_loss, global_positions, rotation_matrix_from_vectors, rot_z
 from scipy.optimize import least_squares
-import json
+from .points import common_image_points
+from .utils import create_board_object_pts, save_scene, load_camera, load_points, load_manual_points
+from .misc import redescending_loss, global_positions, rotation_matrix_from_vectors, rot_z
 
 
 # ========== STANDARD CAMERA MODEL ==========
@@ -17,8 +16,8 @@ def calibrate_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[np.float
     assert len(img_pts)>=4, "Need at least 4 vaild frames to perform calibration."
     obj_pts = np.repeat(obj_pts[np.newaxis, :, :], img_pts.shape[0], axis=0).reshape((img_pts.shape[0], -1, 1, 3))
     img_pts = img_pts.reshape((img_pts.shape[0], -1, 1, 2))
-    flags = cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_FIX_PRINCIPAL_POINT
-    ret, k, d, r, t = cv2.calibrateCamera(obj_pts, img_pts, cam_res, None, None, flags=flags)
+    flags = cv.CALIB_RATIONAL_MODEL + cv.CALIB_FIX_PRINCIPAL_POINT
+    ret, k, d, r, t = cv.calibrateCamera(obj_pts, img_pts, cam_res, None, None, flags=flags)
     if ret:
         return k, d, r, t
     return None
@@ -27,26 +26,26 @@ def calibrate_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[np.float
 def create_undistort_point_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...]):
     def undistort_points(pts: Array[np.float32, ..., 2]):
         pts = pts.reshape((-1, 1, 2))
-        undistorted = cv2.undistortPoints(pts, k, d, P=k)
+        undistorted = cv.undistortPoints(pts, k, d, P=k)
         return undistorted.reshape((-1,2))
     return undistort_points
 
 
 def create_undistort_img_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...], cam_res):
-    map_x, map_y = cv2.initUndistortRectifyMap(k, d, None, k, cam_res, cv2.CV_32FC1)
+    map_x, map_y = cv.initUndistortRectifyMap(k, d, None, k, cam_res, cv.CV_32FC1)
     def undistort_image(img):
-        dst = cv2.remap(img, map_x, map_y, cv2.INTER_LINEAR)
+        dst = cv.remap(img, map_x, map_y, cv.INTER_LINEAR)
         return dst
     return undistort_image
 
 
 def calibrate_pair_extrinsics(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res):
-    flags = cv2.CALIB_FIX_INTRINSIC
-    term_crit = (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 30, 1e-5)
+    flags = cv.CALIB_FIX_INTRINSIC
+    term_crit = (cv.TERM_CRITERIA_MAX_ITER + cv.TERM_CRITERIA_EPS, 30, 1e-5)
     obj_pts = np.repeat(obj_pts[np.newaxis, :, :], img_pts_1.shape[0], axis=0).reshape((img_pts_1.shape[0], -1, 1, 3))
     img_pts_1 = img_pts_1.reshape((img_pts_1.shape[0], img_pts_1.shape[1]*img_pts_1.shape[2], 1, 2))
     img_pts_2 = img_pts_2.reshape((img_pts_2.shape[0], img_pts_2.shape[1]*img_pts_2.shape[2], 1, 2))
-    rms, *_, r, t, _, _ = cv2.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k1, d1,k2, d2,
+    rms, *_, r, t, _, _ = cv.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k1, d1,k2, d2,
                                               cam_res, flags=flags, criteria=term_crit)
     return rms, r, t
 
@@ -54,17 +53,17 @@ def calibrate_pair_extrinsics(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam
 def triangulate_points(img_pts_1, img_pts_2, k1, d1, r1, t1, k2, d2, r2, t2):
     pts_1 = img_pts_1.reshape((-1,1,2))
     pts_2 = img_pts_2.reshape((-1, 1, 2))
-    pts_1 = cv2.undistortPoints(pts_1, k1, d1)
-    pts_2 = cv2.undistortPoints(pts_2, k2, d2)
+    pts_1 = cv.undistortPoints(pts_1, k1, d1)
+    pts_2 = cv.undistortPoints(pts_2, k2, d2)
     p1 = np.hstack((r1, t1))
     p2 = np.hstack((r2, t2))
-    pts_4d = cv2.triangulatePoints(p1, p2, pts_1, pts_2)
+    pts_4d = cv.triangulatePoints(p1, p2, pts_1, pts_2)
     pts_3d = (pts_4d[:3] / pts_4d[3]).T
     return pts_3d
 
 
 def project_points(obj_pts, k, d, r, t):
-    pts =  cv2.projectPoints(obj_pts, r, t, k, d)[0].reshape((-1, 2))
+    pts =  cv.projectPoints(obj_pts, r, t, k, d)[0].reshape((-1, 2))
     return pts
 
 
@@ -76,10 +75,10 @@ def calibrate_fisheye_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[
     assert len(img_pts) >= 4, "Need at least 4 valid frames to perform calibration."
     obj_pts_new = np.repeat(obj_pts[np.newaxis, :, :], img_pts.shape[0], axis=0).reshape((img_pts.shape[0], -1, 1, 3))
     img_pts_new = img_pts.reshape((img_pts.shape[0], -1, 1, 2))
-    flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC + cv2.fisheye.CALIB_CHECK_COND + cv2.fisheye.CALIB_FIX_SKEW
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 1000, 1e-6)
+    flags = cv.fisheye.CALIB_RECOMPUTE_EXTRINSIC + cv.fisheye.CALIB_CHECK_COND + cv.fisheye.CALIB_FIX_SKEW
+    criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 1000, 1e-6)
     try:
-        ret, k, d, r, t = cv2.fisheye.calibrate(obj_pts_new, img_pts_new, cam_res, None, None, None, None, flags,
+        ret, k, d, r, t = cv.fisheye.calibrate(obj_pts_new, img_pts_new, cam_res, None, None, None, None, flags,
                                                 criteria)
         if ret:
             return k, d, r, t, img_pts, ret
@@ -94,26 +93,26 @@ def calibrate_fisheye_camera(obj_pts: Array[np.float32, ..., 3], img_pts: Array[
 def create_undistort_fisheye_point_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...]):
     def undistort_points(pts: Array[np.float32, ..., 2]):
         pts = pts.reshape((-1, 1, 2))
-        undistorted = cv2.fisheye.undistortPoints(pts, k, d, P=k)
+        undistorted = cv.fisheye.undistortPoints(pts, k, d, P=k)
         return undistorted.reshape((-1,2))
     return undistort_points
 
 
 def create_undistort_fisheye_img_function(k: Array[np.float64, 3, 3], d: Array[np.float64, ...], cam_res):
-    map_x, map_y = cv2.fisheye.initUndistortRectifyMap(k, d, np.eye(3), k, cam_res, cv2.CV_32FC1)
+    map_x, map_y = cv.fisheye.initUndistortRectifyMap(k, d, np.eye(3), k, cam_res, cv.CV_32FC1)
     def undistort_image(img):
-        dst = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+        dst = cv.remap(img, map_x, map_y, interpolation=cv.INTER_LINEAR, borderMode=cv.BORDER_CONSTANT)
         return dst
     return undistort_image
 
 
 def calibrate_pair_extrinsics_fisheye(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res):
-    flags = cv2.fisheye.CALIB_FIX_INTRINSIC
-    term_crit = (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS, 100, 1e-5)
+    flags = cv.fisheye.CALIB_FIX_INTRINSIC
+    term_crit = (cv.TERM_CRITERIA_MAX_ITER + cv.TERM_CRITERIA_EPS, 100, 1e-5)
     obj_pts = np.repeat(obj_pts[np.newaxis, :, :], img_pts_1.shape[0], axis=0).reshape((img_pts_1.shape[0], 1, -1, 3))
     img_pts_1 = img_pts_1.reshape((img_pts_1.shape[0], 1, img_pts_1.shape[1]*img_pts_1.shape[2], 2))
     img_pts_2 = img_pts_2.reshape((img_pts_2.shape[0], 1, img_pts_2.shape[1]*img_pts_2.shape[2], 2))
-    rms, *_, r, t = cv2.fisheye.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res,
+    rms, *_, r, t = cv.fisheye.stereoCalibrate(obj_pts, img_pts_1, img_pts_2, k1, d1, k2, d2, cam_res,
                                                 flags=flags, criteria=term_crit)
     return rms, r, t
 
@@ -121,19 +120,19 @@ def calibrate_pair_extrinsics_fisheye(obj_pts, img_pts_1, img_pts_2, k1, d1, k2,
 def triangulate_points_fisheye(img_pts_1, img_pts_2, k1, d1, r1, t1, k2, d2, r2, t2):
     pts_1 = img_pts_1.reshape((-1, 1, 2))
     pts_2 = img_pts_2.reshape((-1, 1, 2))
-    pts_1 = cv2.fisheye.undistortPoints(pts_1, k1, d1)
-    pts_2 = cv2.fisheye.undistortPoints(pts_2, k2, d2)
+    pts_1 = cv.fisheye.undistortPoints(pts_1, k1, d1)
+    pts_2 = cv.fisheye.undistortPoints(pts_2, k2, d2)
     p1 = np.hstack((r1, t1))
     p2 = np.hstack((r2, t2))
-    pts_4d = cv2.triangulatePoints(p1, p2, pts_1, pts_2)
+    pts_4d = cv.triangulatePoints(p1, p2, pts_1, pts_2)
     pts_3d = (pts_4d[:3] / pts_4d[3]).T
     return pts_3d
 
 
 def project_points_fisheye(obj_pts, k, d, r, t):
     obj_pts_reshaped = obj_pts.reshape((-1, 1, 3))
-    r_vec = cv2.Rodrigues(r)[0]
-    pts =  cv2.fisheye.projectPoints(obj_pts_reshaped, r_vec, t, k, d)[0].reshape((-1, 2))
+    r_vec = cv.Rodrigues(r)[0]
+    pts =  cv.fisheye.projectPoints(obj_pts_reshaped, r_vec, t, k, d)[0].reshape((-1, 2))
     return pts
 
 
@@ -223,7 +222,7 @@ def adjust_extrinsics_manual_points(calib_func, img_pts_arr, cam_idxs_to_correct
     :return extrinsic params k_arr, d_arr, r_arr, t_arr, cam_res
     """
     def residual_arr(R_t):
-        R = cv2.Rodrigues(R_t[0:3])[0] # convert fromm rodrigues vector to rotation matrix
+        R = cv.Rodrigues(R_t[0:3])[0] # convert fromm rodrigues vector to rotation matrix
         t = R_t[3:6].reshape((3,1))
 
         # for each skew cam pair
@@ -282,12 +281,12 @@ def adjust_extrinsics_manual_points(calib_func, img_pts_arr, cam_idxs_to_correct
     print(msg, "\nMinimizing error for", calib_type, "cam pairs with indices", cam_pairs, "...\n")
 
     R0, t0 = np.identity(3), np.zeros(3)
-    R0_t0 = np.concatenate([cv2.Rodrigues(R0)[0].flatten(), t0]) # pack initial R_t
+    R0_t0 = np.concatenate([cv.Rodrigues(R0)[0].flatten(), t0]) # pack initial R_t
 
     res = least_squares(residual_arr, R0_t0) # loss = linear (default)
     print(res.message, f"success: {res.success}", f"func evals: {res.nfev}", f"cost: {res.cost}\n", sep="\n")
 
-    R = cv2.Rodrigues(res.x[0:3])[0] # convert fromm rodrigues vector to rotation matrix
+    R = cv.Rodrigues(res.x[0:3])[0] # convert fromm rodrigues vector to rotation matrix
     t = res.x[3:6].reshape((3,1))
 
     for cam_idx in cam_idxs_to_correct:
@@ -298,7 +297,7 @@ def adjust_extrinsics_manual_points(calib_func, img_pts_arr, cam_idxs_to_correct
     return r_arr, t_arr
 
 
-# ==========  FRONT-END FUNCTION MANAGER  ==========
+# ==========  BACK-END FUNCTION MANAGER  ==========
 
 def _calibrate_pairwise_extrinsics(
     calib_func,
