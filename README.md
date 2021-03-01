@@ -19,7 +19,7 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 - 119,490 processed frames with 2D keypoint estimation outputs [(H5 files as in the DLC format, and raw video)](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1) 
     - this is currently organized by date > animal ID > "run/attempt"
 - [3D files that are processed using our FTE baseline model](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1). These can be used for 3D GT.
-   - these files are called `fte.pickle`, have a related `n_cam_scene_sba.json` file, and can be loaded in the GUI.
+   - these files are called `fte.pickle`, have a related `(n)_cam_scene_sba.json` file, and can be loaded in the GUI.
 - A GUI to inspect the 3D dataset, which can be found [here](https://github.com/African-Robotics-Unit/acinoset_viewer)
 
 
@@ -57,7 +57,7 @@ Alternatively, if the checkerboard points detected in `calib_with_gui.ipynb` are
 
 ##### Optionally: Manually Defining the Shared Points for extrinsic calibration:
 
-You can manually define points on each video in a scene with [Argus](http://argus.web.unc.edu/). A quick tutorial is found [here](http://argus.web.unc.edu/tutorial/#Clicker).
+You can manually define points on each video in a scene with [Argus](http://argus.web.unc.edu/) Clicker. A quick tutorial is found [here](http://argus.web.unc.edu/tutorial/#Clicker).
 
 Build the environment:
 ```sh
@@ -84,14 +84,4 @@ $ python argus_converter.py \
 
 #### Full Trajectory Estimation:
 
-Run `full_traj_opt.py`, or use the supplied Jupyter Notebook:
-```sh
-$ python full_traj_opt.py \
-    --n_camera 6 \
-    --logs_dir ../logs \
-    --configs_dir ../configs \
-    --data_dir ../data/2019_03_09/jules/flick1 \
-    --scene_file ../data/2019_03_09/extrinsic_calib/scene_sba.json
-```
-
-If you want to view the 3D animation, run `FTE.ipynb` and follow the instructions!
+Open `FTE.ipynb` and follow the instructions!
