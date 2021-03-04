@@ -143,7 +143,7 @@ def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
     plot_extrinsics(scene_fpath, pts_2d, frames, triangulate_points_fisheye, manual_points_only, **kwargs)
     
     
-def plot_cheetah_states(states, smoothed_states=None, out_fpath=None, mplstyle_fpath=None):
+def plot_cheetah_states(states, smoothed_states=None, out_fpath=None, mplstyle_fpath=None, hide=False):
     fig, axs = plot_optimized_states(states, smoothed_states, mplstyle_fpath)
     if out_fpath is not None:
         fig.savefig(out_fpath, transparent=True)
