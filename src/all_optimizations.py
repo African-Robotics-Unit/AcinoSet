@@ -493,6 +493,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     sigma_bound = 3
     max_pixel_err = cam_res[0] # used in measurement covariance R
     sT = 1/90 if max_pixel_err == 1920 else 1/120 # timestep
+    print(f"Framerate: {1/sT} fps")
 
     # ========= FUNCTION DEFINITINOS ========
 
@@ -725,7 +726,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     print("\nKalman Smoother complete!\n")
     t1 = time()
-    print("Optimization took {0:.2f} seconds".format(t1 - t0))
+    print("Optimization took {0:.2f} seconds\n".format(t1 - t0))
 
     app.stop_logging()
 
