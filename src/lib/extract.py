@@ -58,7 +58,7 @@ def manual_label(vid_fpaths, out_fpath):
     VideoLabelSession(vid_fpaths, out_fpath)
 
 
-# This is a WIP!
+# This is a WIP! Improve this to the point where Argus Clicker is no longer needed
 class VideoLabelSession(object):
 
     def __init__(self, video_filepaths, out_fpath):
