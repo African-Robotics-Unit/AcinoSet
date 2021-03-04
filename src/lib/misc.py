@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import sympy as sp
 
@@ -202,3 +203,21 @@ def rot_z(z):
     return func([[c, s, 0],
                  [-s, c, 0],
                  [0, 0, 1]])
+
+
+# https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
+class Logger:
+
+    def __init__(self, out_fpath):
+        self.terminal = sys.stdout
+        self.logfile = open(out_fpath, "w", buffering=1)
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.logfile.write(message)
+
+    def flush(self):
+        # this flush method is needed for python 3 compatibility.
+        # this handles the flush command by doing nothing.
+        # you might want to specify some extra behavior here.
+        pass

@@ -1,5 +1,6 @@
 # To-Do List
 
+- [ ] Clean VideoWriter functions in [lib.app](https://github.com/African-Robotics-Unit/AcinoSet/blob/655ef34dec6d43cdb4fe6b23eab0e565a8fa846e/src/lib/app.py#L223), move them to another location and then clean lib.app imports
 - [ ] Add a legend to the 3D plots
 - [ ] Add a recording feature to the 3D plots
 - [ ] Move FTE and EKF algorithms into their own modules

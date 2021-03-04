@@ -1,12 +1,11 @@
 # clean imports after video writer funcs are cleaned and moved
 import os
+import sys
 import pickle
+import cv2 as cv
 import numpy as np
 from glob import glob
-from .misc import get_3d_marker_coords
-
-import cv2 as cv
-from .misc import get_markers
+from .misc import get_3d_marker_coords, get_markers, Logger
 from .extract import draw_text
 
 from .calib import calibrate_camera, \
@@ -218,6 +217,18 @@ def save_fte(states, out_dir, pad_len):
         
         out_fpath = os.path.join(out_dir, f"fte{s}.pickle")
         save_cheetah(positions, out_fpath, data=states)
+
+        
+# ==========  STDOUT LOGGING  ==========
+
+def start_logging(out_fpath):
+    """Start logger, appending print output to given output file"""
+    sys.stdout = Logger(out_fpath)
+
+def stop_logging():
+    """Stop logging and return print functionality to normal"""
+    sys.stdout.logfile.close()
+    sys.stdout = sys.stdout.terminal
 
 
 # ==========  VIDS  ==========
