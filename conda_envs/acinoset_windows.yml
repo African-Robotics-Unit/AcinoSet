@@ -16,7 +16,7 @@ dependencies:
   - matplotlib
   - pyqtgraph
   - pyopengl
-  - ipopt
+  - ipopt=3.11.1
 
   - pip:
     - nptyping==0.3.1
