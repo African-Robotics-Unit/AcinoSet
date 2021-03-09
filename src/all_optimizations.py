@@ -449,7 +449,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, start_frame)
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
-    app.plot_cheetah_states(x, out_fpath=fig_fpath, hide=True)
+    app.plot_cheetah_states(x, out_fpath=fig_fpath)
 
     with open(os.path.join(OUT_DIR, 'fte_padded.pickle'), 'rb') as f:
         fte_data=pickle.load(f)

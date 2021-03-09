@@ -318,7 +318,7 @@ def plot_extrinsics(scene_fpath, pts_2d, fnames, triangulate_func, manual_points
     scene.show()
 
 
-def plot_optimized_states(x, smoothed_x=None, mplstyle_fpath=None, hide=False):
+def plot_optimized_states(x, smoothed_x=None, mplstyle_fpath=None):
     x = np.array(x)
     if smoothed_x is not None:
         smoothed_x = np.array(smoothed_x)
@@ -361,6 +361,5 @@ def plot_optimized_states(x, smoothed_x=None, mplstyle_fpath=None, hide=False):
                 lgnd += [l + ' (smoothed)' for l in lgnd]
             axs[i,j].legend(lgnd)
     
-    if not hide:
-        plt.show(block=False)
+    plt.show(block=False)
     return fig, axs
