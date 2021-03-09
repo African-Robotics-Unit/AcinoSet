@@ -217,17 +217,20 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     init_dx = np.zeros((N, P))
     init_ddx = np.zeros((N, P))
 
-    lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
-    lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1])
-    lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
-    lure_z_slope, lure_z_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,3])
-    lure_x_est = frame_est*lure_x_slope + lure_x_intercept
-    lure_y_est = frame_est*lure_y_slope + lure_y_intercept
-    lure_z_est = frame_est*lure_z_slope + lure_z_intercept
+    try:
+        lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
+        lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1])
+        lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
+        lure_z_slope, lure_z_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,3])
+        lure_x_est = frame_est*lure_x_slope + lure_x_intercept
+        lure_y_est = frame_est*lure_y_slope + lure_y_intercept
+        lure_z_est = frame_est*lure_z_slope + lure_z_intercept
 
-    init_x[:,idx['x_l']] = lure_x_est[start_frame: end_frame] # x
-    init_x[:,idx['y_l']] = lure_y_est[start_frame: end_frame] # y
-    init_x[:,idx['z_l']] = lure_z_est[start_frame: end_frame] # z
+        init_x[:,idx['x_l']] = lure_x_est[start_frame: end_frame] # x
+        init_x[:,idx['y_l']] = lure_y_est[start_frame: end_frame] # y
+        init_x[:,idx['z_l']] = lure_z_est[start_frame: end_frame] # z
+    except ValueError as e: # for when there is no lure data
+        print(f"Lure initialisation error: '{e}' -> Lure states initialised to zero")
 
     points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
 
@@ -272,7 +275,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     m.pose_constraint = Constraint(m.N, m.L, m.D3, rule=pose_constraint)
 
     # INTEGRATION
-    print("Initialising numerical integration\n")
+    print("Initialising numerical integration")
     def backwards_euler_pos(m,n,p): # position
         if n > 1:
             return m.x[n,p] == m.x[n-1,p] + m.Ts*m.dx[n,p]
@@ -426,7 +429,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # opt.options["linear_solver"] = "ma86"
 
     t1 = time()
-    print("Initialization took {0:.2f} seconds\n".format(t1 - t0))
+    print("\nInitialization took {0:.2f} seconds\n".format(t1 - t0))
 
     t0 = time()
     results = opt.solve(m, tee=True)
@@ -567,16 +570,19 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # estimate initial points
     states = np.zeros(n_states)
+    
+    try:
+        lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
+        lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
+        lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
 
-    lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
-    lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
-    lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
+        lure_x_est = start_frame*lure_x_slope + lure_x_intercept # initial lure x
+        lure_y_est = start_frame*lure_y_slope + lure_y_intercept # initial lure y
 
-    lure_x_est = start_frame*lure_x_slope + lure_x_intercept # initial lure x
-    lure_y_est = start_frame*lure_y_slope + lure_y_intercept # initial lure y
-
-    states[[idx['x_l'], idx['y_l']]] = [lure_x_est, lure_y_est]             # lure x & y in inertial
-    states[[idx['dx_l'], idx['dy_l']]] = [lure_x_slope/sT, lure_y_slope/sT] # lure x & y velocity in inertial
+        states[[idx['x_l'], idx['y_l']]] = [lure_x_est, lure_y_est]             # lure x & y in inertial
+        states[[idx['dx_l'], idx['dy_l']]] = [lure_x_slope/sT, lure_y_slope/sT] # lure x & y velocity in inertial
+    except ValueError as e: # for when there is no lure data
+        print(f"Lure initialisation error: '{e}' -> Lure states initialised to zero")
 
     points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
 
@@ -651,7 +657,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     P_pred_hist = P_est_hist.copy()
 
     t1 = time()
-    print("Initialization took {0:.2f} seconds\n".format(t1 - t0))
+    print("\nInitialization took {0:.2f} seconds\n".format(t1 - t0))
 
     # ========= RUN EKF & SMOOTHER ========
 
