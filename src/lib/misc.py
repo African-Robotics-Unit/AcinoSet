@@ -4,15 +4,24 @@ import sympy as sp
 
 
 def get_markers():
-    return ["l_eye", "r_eye", "nose",
-            "neck_base", "spine",
-            "tail_base", "tail1", "tail2",
-            "l_shoulder", "l_front_knee", "l_front_ankle",
-            "r_shoulder", "r_front_knee", "r_front_ankle",
-            "l_hip", "l_back_knee", "l_back_ankle",
-            "r_hip", "r_back_knee", "r_back_ankle",
-            "lure"
-           ]
+    return ['nose', 'l_eye', 'r_eye', 'neck_base', 
+            'spine', 'tail_base', 'tail1', 'tail2',
+            'r_shoulder', 'r_front_knee', 'r_front_ankle', #'r_front_paw',
+            'l_shoulder', 'l_front_knee', 'l_front_ankle', #'l_front_paw',
+            'r_hip', 'r_back_knee', 'r_back_ankle', #'r_back_paw',
+            'l_hip', 'l_back_knee', 'l_back_ankle', #'l_back_paw',
+            'lure'
+           ] # excludes paws for now!
+
+
+def get_skeleton():
+    return [['nose', 'l_eye'], ['nose', 'r_eye'], ['nose', 'neck_base'], ['l_eye', 'neck_base'], ['r_eye', 'neck_base'], 
+            ['neck_base', 'spine'], ['spine', 'tail_base'], ['tail_base', 'tail1'], ['tail1', 'tail2'],
+            ['neck_base', 'r_shoulder'], ['r_shoulder', 'r_front_knee'], ['r_front_knee', 'r_front_ankle'], #['r_front_ankle', 'r_front_paw'], 
+            ['neck_base', 'l_shoulder'], ['l_shoulder', 'l_front_knee'], ['l_front_knee', 'l_front_ankle'], #['l_front_ankle', 'l_front_paw'], 
+            ['tail_base', 'r_hip'], ['r_hip', 'r_back_knee'], ['r_back_knee', 'r_back_ankle'], #['r_back_ankle', 'r_back_paw'],
+            ['tail_base', 'l_hip'], ['l_hip', 'l_back_knee'], ['l_back_knee', 'l_back_ankle'], #['l_back_ankle', 'l_back_paw']
+           ] # exludes paws for now!
 
 
 def get_pose_params():
@@ -28,7 +37,7 @@ def get_pose_params():
               'theta_10', 'theta_11',      # l_hip, l_back_knee
               'theta_12', 'theta_13',      # r_hip, r_back_knee
               'x_l', 'y_l', 'z_l'          # lure position in inertial
-             ]
+             ] # exludes paws for now!
     return dict(zip(states ,range(len(states))))
 
 
@@ -134,7 +143,7 @@ def global_positions(R_arr, t_arr):
     t_arr = np.array(t_arr).reshape((-1, 3, 1))
     
     positions = []
-    assert R_arr.shape[0]==t_arr.shape[0], "Number of cams in R_arr do not match t_arr"
+    assert R_arr.shape[0]==t_arr.shape[0], 'Number of cams in R_arr do not match t_arr'
     for r, t in zip(R_arr, t_arr):
         pos = -r.T @ t
         positions.append(pos)
@@ -210,7 +219,7 @@ class Logger:
 
     def __init__(self, out_fpath):
         self.terminal = sys.stdout
-        self.logfile = open(out_fpath, "w", buffering=1)
+        self.logfile = open(out_fpath, 'w', buffering=1)
 
     def write(self, message):
         self.terminal.write(message)
