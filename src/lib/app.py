@@ -153,7 +153,7 @@ def plot_cheetah_states(states, smoothed_states=None, out_fpath=None, mplstyle_f
         
 def _plot_cheetah_reconstruction(positions, data_dir, scene_fname=None, labels=None, **kwargs):
     positions = np.array(positions)
-    *_, scene_fpath = find_scene_file(data_dir, scene_fname, verbose=True)
+    *_, scene_fpath = find_scene_file(data_dir, scene_fname, verbose=False)
     ca = Cheetah(positions, scene_fpath, labels, project_points_fisheye, **kwargs)
     ca.animation()
     
@@ -229,24 +229,23 @@ def stop_logging():
 
 # ==========  VIDS  ==========
 
-def get_vid_info(path):
+def get_vid_info(path_dir, vid_extension='mp4'):
     """Finds a video specified in/by the path variable and returns its info
     
-    :param path: Either a directory containing an mp4 video or the path to a specific video file
+    :param path: Either a directory containing a video or the path to a specific video file
     """
     from errno import ENOENT
     
-    orig_path = path
-    vid = VideoProcessorCV(in_name=path) # assume path holds path to video file
-    if not vid.get_video().isOpened():
-        files = glob(os.path.join(path, 'cam[1-9].mp4')) # assume path is a dir that holds video file(s)
+    orig_path = path_dir
+    if not os.path.isfile(path_dir):
+        files = glob(os.path.join(path_dir, f"*.{vid_extension}")) # assume path is a dir that holds video file(s)
         if files:
-            path = files[0]
+            path_dir = files[0]
+        else:
+            raise FileNotFoundError(ENOENT, os.strerror(ENOENT), orig_path) # assume videos didn't open due to incorrect path
         
-        vid = VideoProcessorCV(in_name=path)
-        if not vid.get_video().isOpened():
-             raise FileNotFoundError(ENOENT, os.strerror(ENOENT), orig_path) # assume videos didn't open due to incorrect path
-        
+    vid = VideoProcessorCV(in_name=path_dir)
+    vid.close()
     return (vid.width(), vid.height()), vid.fps(), vid.frame_count(), vid.codec()
 
 

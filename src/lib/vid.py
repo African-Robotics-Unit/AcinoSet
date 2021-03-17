@@ -146,8 +146,9 @@ class VideoProcessorCV(VideoProcessor):
         self.out_vid.write(np.flip(frame, 2))
 
     def close(self):
-        self.out_vid.release()
         self.in_vid.release()
+        if self.out_name != "":
+            self.out_vid.release()
 
 
 def get_segment_indices(bodyparts2connect, all_bpts):
