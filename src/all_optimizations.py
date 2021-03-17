@@ -51,10 +51,14 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     app.start_logging(os.path.join(OUT_DIR, 'fte.log'))
 
+    # load video info
+    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
+    assert end_frame <= tot_frames
+
     start_frame -= 1; # 0 based indexing
+    assert start_frame >= 0
     N = end_frame-start_frame
-    Ts = 1/120 if '2019' in DATA_DIR else 1/90 # timestep
-    print(f"Framerate: {1/Ts} fps")
+    Ts = 1.0/fps # timestep
 
     # ========= POSE FUNCTIONS ========
 
@@ -93,6 +97,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # ========= IMPORT CAMERA & SCENE PARAMS ========
     K_arr, D_arr, R_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
     D_arr = D_arr.reshape((-1,4))
+    assert res == cam_res
 
     # ========= IMPORT DATA ========
 
@@ -145,11 +150,9 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     #===================================================
     #                   Load in data
     #===================================================
-    print("Loading data")
-
     df_paths = glob(os.path.join(DLC_DIR, '*.h5'))
 
-    points_2d_df = utils.load_dlc_points_as_df(df_paths)
+    points_2d_df = utils.load_dlc_points_as_df(df_paths, verbose=False)
     points_3d_df = utils.get_pairwise_3d_points_from_df(
         points_2d_df[points_2d_df['likelihood']>dlc_thresh],
         K_arr, D_arr, R_arr, t_arr,
@@ -434,7 +437,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     t0 = time()
     results = opt.solve(m, tee=True)
     t1 = time()
-    print("Optimization took {0:.2f} seconds".format(t1 - t0))
+    print("\nOptimization took {0:.2f} seconds\n".format(t1 - t0))
 
     app.stop_logging()
 
@@ -446,15 +449,10 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         dx.append([value(m.dx[n, p]) for p in m.P])
         ddx.append([value(m.ddx[n, p]) for p in m.P])
 
-    app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, start_frame)
+    app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
     app.plot_cheetah_states(x, out_fpath=fig_fpath)
-
-    with open(os.path.join(OUT_DIR, 'fte_padded.pickle'), 'rb') as f:
-        fte_data=pickle.load(f)
-    vid_fpath = os.path.join(OUT_DIR, 'fte.avi')
-    app.reconstruction_reprojection_video(DATA_DIR, vid_fpath, np.array(fte_data['positions']))
     
     
 def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
@@ -486,17 +484,22 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     derivs.update({'d'+state: vel_idx+derivs[state] for state in derivs})
     idx.update(derivs)
 
+    # load video info
+    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
+    assert end_frame <= tot_frames
+
     # Load extrinsic params
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
+    assert res == cam_res
     camera_params = [[K, D, R, T] for K, D, R, T in zip(k_arr, d_arr, r_arr, t_arr)]
 
     # other vars
     start_frame -= 1 # 0 based indexing
+    assert start_frame >= 0
     n_frames = end_frame-start_frame
     sigma_bound = 3
     max_pixel_err = cam_res[0] # used in measurement covariance R
-    sT = 1/90 if max_pixel_err == 1920 else 1/120 # timestep
-    print(f"Framerate: {1/sT} fps")
+    sT = 1.0/fps # timestep
 
     # ========= FUNCTION DEFINITINOS ========
 
@@ -544,7 +547,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     assert(len(dlc_2d_point_files) == n_cams), f"# of dlc '.h5' files != # of cams in {n_cams}_cam_scene_sba.json"
 
     # Load Measurement Data (pixels, likelihood)
-    points_2d_df = utils.load_dlc_points_as_df(dlc_2d_point_files)
+    points_2d_df = utils.load_dlc_points_as_df(dlc_2d_point_files, verbose=False)
 
     points_3d_df = utils.get_pairwise_3d_points_from_df(
         points_2d_df[points_2d_df['likelihood']>dlc_thresh], # ignore points with low likelihood
@@ -570,7 +573,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # estimate initial points
     states = np.zeros(n_states)
-    
+
     try:
         lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
         lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
@@ -720,6 +723,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
         P = (np.eye(K.shape[0]) - K @ H) @ P
         P_est_hist[i] = P
 
+    print("EKF complete!")
     print("Outliers ignored:", outliers_ignored)
 
     # Run Kalman Smoother
@@ -745,15 +749,10 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
                   smoothed_dx=smooth_states_est_hist[:, vel_idx:acc_idx],
                   smoothed_ddx=smooth_states_est_hist[:, acc_idx:]
                  )
-    app.save_ekf(states, OUT_DIR, start_frame)
+    app.save_ekf(states, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
     fig_fpath= os.path.join(OUT_DIR, 'ekf.svg')
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
-
-    with open(os.path.join(OUT_DIR, 'ekf_padded.pickle'), 'rb') as f:
-        ekf_data=pickle.load(f)
-    vid_fpath = os.path.join(OUT_DIR, 'ekf.avi')
-    app.reconstruction_reprojection_video(DATA_DIR, vid_fpath, np.array(ekf_data['smoothed_positions']))
 
 
 def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
@@ -769,16 +768,21 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     app.start_logging(os.path.join(OUT_DIR, 'sba.log'))
 
-    start_frame -= 1
+    # load video info
+    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
+    assert end_frame <= tot_frames
+
+    start_frame -= 1 # 0 based indexing
+    assert start_frame >= 0
     N = end_frame-start_frame
 
-    *_, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
+    *_, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
     dlc_points_fpaths = glob(os.path.join(DLC_DIR, '*.h5'))
     assert n_cams == len(dlc_points_fpaths)
 
     # Load Measurement Data (pixels, likelihood)
-    points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths)
+    points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
     points_2d_df = points_2d_df[points_2d_df["frame"].between(start_frame, end_frame-1)]
     points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
 
@@ -794,7 +798,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
     plt.legend()
     fig_fpath = os.path.join(OUT_DIR, 'sba.svg')
     plt.savefig(fig_fpath, transparent=True)
-    print(f'Saved to {fig_fpath}\n')
+    print(f'Saved {fig_fpath}\n')
     plt.show(block=False)
 
     # ========= SAVE SBA RESULTS ========
@@ -807,12 +811,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
         for frame, *pt_3d in marker_pts:
             positions[int(frame)-start_frame, i] = pt_3d
 
-    app.save_sba(positions, OUT_DIR, start_frame)
-
-    with open(os.path.join(OUT_DIR, 'sba_padded.pickle'), 'rb') as f:
-        sba_data=pickle.load(f)
-    vid_fpath = os.path.join(OUT_DIR, 'sba.avi')
-    app.reconstruction_reprojection_video(DATA_DIR, vid_fpath, np.array(sba_data['positions']))
+    app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
     
     
 # ========= MAIN ========
