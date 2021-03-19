@@ -5,12 +5,12 @@ https://github.com/DeepLabCut/DeepLabCut/blob/master/deeplabcut/utils/video_proc
 """
 
 import os
-import cv2
-from glob import glob
+import cv2 as cv
 import numpy as np
 import pandas as pd
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+from glob import glob
 from tqdm import trange
 from skimage.draw import circle, line_aa
 
@@ -123,23 +123,23 @@ class VideoProcessorCV(VideoProcessor):
         super(VideoProcessorCV, self).__init__(*args, **kwargs)
 
     def get_video(self):
-        return cv2.VideoCapture(self.in_name)
+        return cv.VideoCapture(self.in_name)
 
     def get_info(self):
-        self.in_w = int(self.in_vid.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.in_h = int(self.in_vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        all_frames = int(self.in_vid.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.FPS = self.in_vid.get(cv2.CAP_PROP_FPS)
+        self.in_w = int(self.in_vid.get(cv.CAP_PROP_FRAME_WIDTH))
+        self.in_h = int(self.in_vid.get(cv.CAP_PROP_FRAME_HEIGHT))
+        all_frames = int(self.in_vid.get(cv.CAP_PROP_FRAME_COUNT))
+        self.FPS = self.in_vid.get(cv.CAP_PROP_FPS)
         self.nc = 3
         if self.nframes == -1 or self.nframes > all_frames:
             self.nframes = all_frames
 
     def create_video(self):
-        fourcc = cv2.VideoWriter_fourcc(*self.codec())
-        return cv2.VideoWriter(self.out_name, fourcc, self.FPS, (self.out_w, self.out_h), True)
+        fourcc = cv.VideoWriter_fourcc(*self.codec())
+        return cv.VideoWriter(self.out_name, fourcc, self.FPS, (self.out_w, self.out_h), True)
 
     def _read_frame(self):  # return RGB (rather than BGR)!
-        # return cv2.cvtColor(np.flip(self.vid.read()[1],2), cv2.COLOR_BGR2RGB)
+        # return cv.cvtColor(np.flip(self.vid.read()[1],2), cv.COLOR_BGR2RGB)
         return np.flip(self.in_vid.read()[1], 2)
 
     def save_frame(self, frame):
@@ -210,7 +210,7 @@ def CreateVideo(clip, df, pcutoff, dotsize, colormap, bodyparts2plot, bodyparts2
                                 np.isnan(df_x[[bpt1, bpt2], idx]).any()
                                 or np.isnan(df_y[[bpt1, bpt2], idx]).any()
                             ):
-                                # change to cv2.line
+                                # change to cv.line
                                 rr, cc, val = line_aa(
                                     int(np.clip(df_y[bpt1, idx], 0, ny - 1)),
                                     int(np.clip(df_x[bpt1, idx], 0, nx - 1)),
@@ -222,7 +222,7 @@ def CreateVideo(clip, df, pcutoff, dotsize, colormap, bodyparts2plot, bodyparts2
                 for ind, num_bp, num_ind in bpts2color:
                     if (df_likelihood[ind, idx] > pcutoff) or np.isnan(df_likelihood[ind, idx]):
                         color = colors[num_bp]
-                        # change to cv2.circle
+                        # change to cv.circle
                         rr, cc = circle(df_y[ind, idx], df_x[ind, idx], dotsize, shape=(ny, nx))
                         image[rr, cc] = color
             except KeyError:

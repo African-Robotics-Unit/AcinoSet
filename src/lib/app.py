@@ -5,33 +5,21 @@ import pickle
 import cv2 as cv
 import numpy as np
 from glob import glob
-from .misc import get_3d_marker_coords, get_markers, get_skeleton, Logger
-from .extract import draw_text
-from .vid import proc_video, VideoProcessorCV
-
-from .calib import calibrate_camera, \
-    calibrate_fisheye_camera, \
-    calibrate_pair_extrinsics, \
-    calibrate_pair_extrinsics_fisheye, \
-    create_undistort_point_function, \
-    create_undistort_fisheye_point_function, \
-    triangulate_points, \
-    triangulate_points_fisheye, \
-    project_points, \
-    project_points_fisheye, \
-    _calibrate_pairwise_extrinsics
-
-from .sba import _sba_board_points, _sba_points
-
 from .points import find_corners_images
-
-from .utils import create_board_object_pts, \
-    save_points, load_points, \
-    save_camera, load_camera, \
-    load_manual_points, \
-    load_dlc_points_as_df, find_scene_file, save_optimised_cheetah, save_3d_cheetah_as_2d
-
-from .plotting import plot_calib_board, plot_optimized_states, Cheetah, plot_extrinsics
+from .misc import get_3d_marker_coords, get_markers, get_skeleton, Logger
+from .vid import proc_video, VideoProcessorCV
+from .utils import create_board_object_pts, save_points, load_points, \
+    save_camera, load_camera, load_manual_points, load_dlc_points_as_df, \
+    find_scene_file, save_optimised_cheetah, save_3d_cheetah_as_2d
+from .sba import _sba_board_points, _sba_points
+from .calib import calibrate_camera, calibrate_fisheye_camera, \
+    calibrate_pair_extrinsics, calibrate_pair_extrinsics_fisheye, \
+    create_undistort_point_function, create_undistort_fisheye_point_function, \
+    triangulate_points, triangulate_points_fisheye, \
+    project_points, project_points_fisheye, \
+    _calibrate_pairwise_extrinsics
+from .plotting import plot_calib_board, plot_optimized_states, \
+    plot_extrinsics, Cheetah
 
 
 def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len, window_size=11, remove_unused_images=False):
@@ -126,7 +114,7 @@ def plot_points_fisheye_undistort(points_fpath, camera_fpath):
     
     
 def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
-    *_, scene_fpath = find_scene_file(data_dir, scene_fname)
+    *_, scene_fpath = find_scene_file(data_dir, scene_fname, verbose=False)
     points_dir = os.path.join(os.path.dirname(scene_fpath), "points")
     pts_2d, frames = [], []
     if manual_points_only:

@@ -12,7 +12,7 @@ from scipy.io import savemat
 
 # ========== LOAD FUNCTIONS ==========
 
-def load_points(fpath, verbose=True):
+def load_points(fpath, verbose=False):
     with open(fpath, 'r') as f:
         data = json.load(f)
         fnames = list(data['points'].keys())
@@ -38,7 +38,7 @@ def load_manual_points(fpath, verbose=True):
     return points, fnames, cam_res
 
 
-def load_camera(fpath, verbose=True):
+def load_camera(fpath, verbose=False):
     with open(fpath, 'r') as f:
         data = json.load(f)
         cam_res = tuple(data['camera_resolution'])
