@@ -142,7 +142,8 @@ def calibrate_pairwise_extrinsics(calib_func, img_pts_arr, fnames_arr, k_arr, d_
                                      cam_res, board_shape, board_edge_len,
                                      dummy_scene_data, cams, cam_pairs=None):
     # calib_func is one of 'calibrate_pair_extrinsics' or 'calibrate_pair_extrinsics_fisheye'
-    cam_pairs = [[i, j] for i, j in zip(cams[0:-1], cams[1:]) if not cam_pairs]
+    if cam_pairs is None:
+        cam_pairs = [[i, j] for i, j in zip(cams[0:-1], cams[1:])]
     r_arr = [[] for _ in cams]
     t_arr = r_arr.copy()
     # Set camera 1's initial position and rotation
@@ -372,16 +373,21 @@ def _calibrate_pairwise_extrinsics(
     )
 
     if incomplete_cams:
+        from os.path import join, dirname
+        
         incomplete_fpath = out_fpath.replace(".json", "_before_corrections.json")
         save_scene(incomplete_fpath, k_arr, d_arr, r_arr, t_arr, cam_res)
+        
+        if manual_points_fpath is None:
+            manual_points_fpath = join(dirname(points_fpaths[0]), 'manual_points.json')
 
         # this uses only the first incorrect cam - must be generalised to use all incorrect cams!!
         print("Running Least Squares using manual points to correct extrinsics...")
         try:
             img_pts_arr, *_ = load_manual_points(manual_points_fpath)
-        except Exception as e:
-            print("\nmanual_points.json not found. Please rerun this calibration after obtaining manually-labelled points")
-            raise Exception(e)
+        except FileNotFoundError as e:
+            print(f"\nPlease rerun this calibration after obtaining manually-labelled points")
+            raise FileNotFoundError(e)
             
         cam_idxs_to_correct = list(range(cams.index(incomplete_cams[0]),len(cams)))
         r_arr, t_arr = adjust_extrinsics_manual_points(calib_func, img_pts_arr, cam_idxs_to_correct, k_arr, d_arr, r_arr, t_arr)

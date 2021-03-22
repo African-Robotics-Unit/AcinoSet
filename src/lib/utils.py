@@ -3,11 +3,12 @@ import pickle
 import json
 import numpy as np
 import pandas as pd
+from glob import glob
+from errno import ENOENT
 from typing import Tuple
 from nptyping import Array
-from datetime import datetime
-from glob import glob
 from scipy.io import savemat
+from datetime import datetime
 
 
 # ========== LOAD FUNCTIONS ==========
@@ -25,7 +26,7 @@ def load_points(fpath, verbose=False):
     return points, fnames, board_shape, board_square_len, cam_res
 
 
-def load_manual_points(fpath, verbose=False):
+def load_manual_points(fpath, verbose=True):
     with open(fpath, 'r') as f:
         data = json.load(f)
         points = np.array(data['points'])
@@ -49,7 +50,7 @@ def load_camera(fpath, verbose=False):
     return k, d, cam_res
 
 
-def load_scene(fpath, verbose=False):
+def load_scene(fpath, verbose=True):
     with open(fpath, 'r') as f:
         data = json.load(f)
         cam_res = tuple(data['camera_resolution'])
@@ -71,7 +72,7 @@ def load_scene(fpath, verbose=False):
     return k_arr, d_arr, r_arr, t_arr, cam_res
 
 
-def load_dlc_points_as_df(dlc_df_fpaths, verbose=False):
+def load_dlc_points_as_df(dlc_df_fpaths, verbose=True):
     dfs = []
     for path in dlc_df_fpaths:
         dlc_df = pd.read_hdf(path)
@@ -143,12 +144,12 @@ def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res):
     print(f'Saved extrinsics to {out_fpath}\n')
 
 
-def save_cheetah(positions, out_fpath, data=None, for_matlab=True):
+def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=True, save_as_csv=True):
     file_data = dict(positions=positions)
     
-    if data is not None:
-        assert type(data) is dict
-        file_data.update(data)
+    if extra_data is not None:
+        assert type(extra_data) is dict
+        file_data.update(extra_data)
 
     with open(out_fpath, 'wb') as f:
             pickle.dump(file_data, f)
@@ -158,12 +159,66 @@ def save_cheetah(positions, out_fpath, data=None, for_matlab=True):
         out_fpath = os.path.splitext(out_fpath)[0] + '.mat'
         savemat(out_fpath, file_data)
         print('Saved', out_fpath)
+        
+    if save_as_csv:
+        # to-do??
+        # should use a similar method as save_3d_cheetah_as 3d, along the lines of:
+        
+#         xyz_labels = ['x', 'y', 'z']
+#         pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
+        
+#         for i in range(len(video_fpaths)):
+#             cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
+#             fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
 
+#             df = pd.DataFrame(data.reshape((n_frames, -1)), columns=pdindex, index=range(start_frame, start_frame+n_frames))
+#             df.to_csv(os.path.splitext(fpath)[0] + ".csv")
+        pass
+
+            
+def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project_func, start_frame, save_as_csv=True, out_fname=None):
+    assert os.path.dirname(os.path.dirname(scene_fpath)) in out_dir, 'scene_fpath does not belong to the same parent folder as out_dir'
+    
+    video_fpaths = glob(os.path.join(out_dir, 'cam[1-9].mp4')) # check current dir for videos
+    if not video_fpaths:
+        video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # check parent dir for videos
+    
+    if video_fpaths:
+        k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_fpath, verbose=False)
+        assert len(k_arr)==len(video_fpaths)
+        
+        xyz_labels = ['x', 'y', 'likelihood'] # same format as DLC
+        pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
+        
+        positions_3d = np.array(positions_3d)
+        n_frames = len(positions_3d)
+        
+        out_fname = os.path.basename(out_dir) if out_fname is None else out_fname
+        
+        for i in range(len(video_fpaths)):
+            cam_params = [k_arr[i], d_arr[i], r_arr[i], t_arr[i]]
+            data = np.full(positions_3d.shape, np.nan)
+            data[:, :, 0:2] = project_func(positions_3d, *cam_params).reshape((n_frames,-1, 2))
+            
+            cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
+            fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
+
+            df = pd.DataFrame(data.reshape((n_frames, -1)), columns=pdindex, index=range(start_frame, start_frame+n_frames))
+            if save_as_csv:
+                df.to_csv(os.path.splitext(fpath)[0] + ".csv")
+            df.to_hdf(fpath, f"{out_fname}_df", format="table", mode="w")
+    
+        fpath = fpath.replace(cam_name, 'cam*')
+        print('Saved', fpath)
+        if save_as_csv:
+            print('Saved', os.path.splitext(fpath)[0] + ".csv")
+        print()
+    else:
+        print('Could not save 3D cheetah as 2D - No videos were found in', out_dir, 'or', os.path.dirname(out_dir))
 
 # ========== OTHER ==========
 
 def find_scene_file(dir_path, scene_fname=None, verbose=True):
-    from errno import ENOENT
     if scene_fname is None:
         n_cams = len(glob(os.path.join(dir_path, 'cam[1-9].mp4'))) # reads up to cam9.mp4 only
         scene_fname = f'{n_cams}_cam_scene_sba.json' if n_cams else '[1-9]_cam_scene*.json'
@@ -176,13 +231,12 @@ def find_scene_file(dir_path, scene_fname=None, verbose=True):
         if scene_files:
             k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_files[-1], verbose)
             scene_fname = os.path.basename(scene_files[-1])
-            n_cams = int([j for j in scene_fname if j.isdigit()][0])
+            n_cams = int(scene_fname[0]) # assuming scene_fname is of the form '[1-9]_cam_scene*'
             return k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_files[-1]
         else:
             return find_scene_file(os.path.dirname(dir_path), scene_fname, verbose)
 
-    raise FileNotFoundError(
-        ENOENT, os.strerror(ENOENT), os.path.join('extrinsic_calib', scene_fname))
+    raise FileNotFoundError(ENOENT, os.strerror(ENOENT), os.path.join('extrinsic_calib', scene_fname))
 
 
 def create_board_object_pts(board_shape: Tuple[int, int], square_edge_length: np.float32) -> Array[np.float32, ..., 3]:
@@ -217,3 +271,4 @@ def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, tri
     print()
     points_3d_df = df_pairs[['frame', 'marker', 'x','y','z']].groupby(['frame','marker']).mean().reset_index()
     return points_3d_df
+
