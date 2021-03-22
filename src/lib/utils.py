@@ -3,11 +3,12 @@ import pickle
 import json
 import numpy as np
 import pandas as pd
+from glob import glob
+from errno import ENOENT
 from typing import Tuple
 from nptyping import Array
-from datetime import datetime
-from glob import glob
 from scipy.io import savemat
+from datetime import datetime
 
 
 # ========== LOAD FUNCTIONS ==========
@@ -143,7 +144,7 @@ def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res):
     print(f'Saved extrinsics to {out_fpath}\n')
 
 
-def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=True):
+def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=True, save_as_csv=True):
     file_data = dict(positions=positions)
     
     if extra_data is not None:
@@ -158,6 +159,21 @@ def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=Tru
         out_fpath = os.path.splitext(out_fpath)[0] + '.mat'
         savemat(out_fpath, file_data)
         print('Saved', out_fpath)
+        
+    if save_as_csv:
+        # to-do??
+        # should use a similar method as save_3d_cheetah_as 3d, along the lines of:
+        
+#         xyz_labels = ['x', 'y', 'z']
+#         pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
+        
+#         for i in range(len(video_fpaths)):
+#             cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
+#             fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
+
+#             df = pd.DataFrame(data.reshape((n_frames, -1)), columns=pdindex, index=range(start_frame, start_frame+n_frames))
+#             df.to_csv(os.path.splitext(fpath)[0] + ".csv")
+        pass
 
             
 def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project_func, start_frame, save_as_csv=True, out_fname=None):
@@ -167,7 +183,7 @@ def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project
     if not video_fpaths:
         video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # check parent dir for videos
     
-    if video_fpaths:        
+    if video_fpaths:
         k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_fpath, verbose=False)
         assert len(k_arr)==len(video_fpaths)
         
@@ -203,7 +219,6 @@ def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project
 # ========== OTHER ==========
 
 def find_scene_file(dir_path, scene_fname=None, verbose=True):
-    from errno import ENOENT
     if scene_fname is None:
         n_cams = len(glob(os.path.join(dir_path, 'cam[1-9].mp4'))) # reads up to cam9.mp4 only
         scene_fname = f'{n_cams}_cam_scene_sba.json' if n_cams else '[1-9]_cam_scene*.json'
@@ -216,7 +231,7 @@ def find_scene_file(dir_path, scene_fname=None, verbose=True):
         if scene_files:
             k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_files[-1], verbose)
             scene_fname = os.path.basename(scene_files[-1])
-            n_cams = int([j for j in scene_fname if j.isdigit()][0])
+            n_cams = int(scene_fname[0]) # assuming scene_fname is of the form '[1-9]_cam_scene*'
             return k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_files[-1]
         else:
             return find_scene_file(os.path.dirname(dir_path), scene_fname, verbose)
