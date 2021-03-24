@@ -1,4 +1,4 @@
-# AcinoSet: A 3D pose estimation datasetand baseline models for Cheetahs in the wild<img src="https://images.squarespace-cdn.com/content/v1/57f6d51c9f74566f55ecf271/1608473251355-R6MD2DPAGXD541O6KSPO/ke17ZwdGBToddI8pDm48kDJiRRinvyl0ibURJcD42oMUqsxRUqqbr1mOJYKfIPR7LoDQ9mXPOjoJoqy81S2I8N_N4V1vUb5AoIIIbLZhVYxCRW4BPu10St3TBAUQYVKcQRhUxETRWa-oq147TtIoC7IIYHcXSEvrmlBoYmbrKNZ_GGuik8tacc4P7_d_fn_0/cheetahTurn.png?format=2500w" width="375" title="AcinoSet" alt="Cheetah" align="right" vspace = "50">
+# AcinoSet: A 3D Pose Estimation Dataset and Baseline Models for Cheetahs in the Wild<img src="https://images.squarespace-cdn.com/content/v1/57f6d51c9f74566f55ecf271/1608473251355-R6MD2DPAGXD541O6KSPO/ke17ZwdGBToddI8pDm48kDJiRRinvyl0ibURJcD42oMUqsxRUqqbr1mOJYKfIPR7LoDQ9mXPOjoJoqy81S2I8N_N4V1vUb5AoIIIbLZhVYxCRW4BPu10St3TBAUQYVKcQRhUxETRWa-oq147TtIoC7IIYHcXSEvrmlBoYmbrKNZ_GGuik8tacc4P7_d_fn_0/cheetahTurn.png?format=2500w" width="375" title="AcinoSet" alt="Cheetah" align="right" vspace = "50">
 
 Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Alexander Mathis, Mackenzie W. Mathis, Amir Patel 
 
