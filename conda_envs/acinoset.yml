@@ -18,9 +18,8 @@ dependencies:
   - pyqtgraph
   - pyopengl
   - ipopt
-
   - pip:
     - nptyping==0.3.1
     - pyomo
     - tables
-    - deeplabcut
+    - PySide2
