@@ -10,6 +10,7 @@ dependencies:
   - opencv
   - nodejs
   - jupyterlab
+  - nb_conda
   - pandas
   - scipy
   - sympy
