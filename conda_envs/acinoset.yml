@@ -10,6 +10,7 @@ dependencies:
   - opencv
   - nodejs
   - jupyterlab
+  - nb_conda
   - pandas
   - scipy
   - sympy
@@ -17,9 +18,8 @@ dependencies:
   - pyqtgraph
   - pyopengl
   - ipopt
-
   - pip:
     - nptyping==0.3.1
     - pyomo
     - tables
-    - deeplabcut
+    - PyQt5
