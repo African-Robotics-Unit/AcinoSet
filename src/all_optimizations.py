@@ -453,6 +453,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
     app.plot_cheetah_states(x, out_fpath=fig_fpath)
+    plt.close('all')
     
     
 def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
@@ -753,6 +754,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     fig_fpath= os.path.join(OUT_DIR, 'ekf.svg')
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
+    plt.close('all')
 
 
 def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
@@ -812,6 +814,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
             positions[int(frame)-start_frame, i] = pt_3d
 
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
+    plt.close('all')
     
     
 # ========= MAIN ========
@@ -830,4 +833,9 @@ if __name__ == "__main__":
     fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    
+    data_fpaths = [os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
+                   os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
+                   os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
+    app.plot_multiple_cheetah_reconstructions(data_fpaths, hide_lure=True, reprojections=False, dark_mode=True)
     
