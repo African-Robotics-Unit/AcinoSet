@@ -12,7 +12,7 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import trange
-from skimage.draw import circle, line_aa
+from skimage.draw import disk, line_aa
 
 
 class VideoProcessor(object):
@@ -210,7 +210,7 @@ def CreateVideo(clip, df, pcutoff, dotsize, colormap, bodyparts2plot, bodyparts2
                                 np.isnan(df_x[[bpt1, bpt2], idx]).any()
                                 or np.isnan(df_y[[bpt1, bpt2], idx]).any()
                             ):
-                                # change to cv.line
+                                # change to cv.line?
                                 rr, cc, val = line_aa(
                                     int(np.clip(df_y[bpt1, idx], 0, ny - 1)),
                                     int(np.clip(df_x[bpt1, idx], 0, nx - 1)),
@@ -222,8 +222,8 @@ def CreateVideo(clip, df, pcutoff, dotsize, colormap, bodyparts2plot, bodyparts2
                 for ind, num_bp, num_ind in bpts2color:
                     if (df_likelihood[ind, idx] > pcutoff) or np.isnan(df_likelihood[ind, idx]):
                         color = colors[num_bp]
-                        # change to cv.circle
-                        rr, cc = circle(df_y[ind, idx], df_x[ind, idx], dotsize, shape=(ny, nx))
+                        # change to cv.circle?
+                        rr, cc = disk([df_y[ind, idx], df_x[ind, idx]], dotsize, shape=(ny, nx))
                         image[rr, cc] = color
             except KeyError:
                 pass
