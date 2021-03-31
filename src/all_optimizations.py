@@ -12,15 +12,13 @@ from time import time
 from scipy.stats import linregress
 from pyomo.environ import *
 from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
-from lib import utils, app
+from lib import misc, utils, app
+from lib.calib import triangulate_points_fisheye, project_points_fisheye
 
 plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 
     
 def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
-    from lib import misc
-    from lib.calib import triangulate_points_fisheye
-
     # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
     # we use a redescending cost to stop outliers affecting the optimisation negatively
     redesc_a = 3
@@ -53,7 +51,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
     start_frame -= 1; # 0 based indexing
     assert start_frame >= 0
@@ -457,9 +455,6 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     
     
 def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
-    from lib import misc
-    from lib.calib import project_points_fisheye, triangulate_points_fisheye
-    
     # ========= INIT VARS ========
 
     t0 = time()
@@ -487,7 +482,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
     # Load extrinsic params
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
@@ -758,8 +753,6 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
 
 def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
-    from lib.misc import get_markers
-    
     t0 = time()
 
     assert os.path.exists(DATA_DIR)
@@ -772,7 +765,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
     start_frame -= 1 # 0 based indexing
     assert start_frame >= 0
@@ -805,7 +798,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # ========= SAVE SBA RESULTS ========
 
-    markers = get_markers()
+    markers = misc.get_markers()
 
     positions = np.full((N, len(markers), 3), np.nan)
     for i, marker in enumerate(markers):
@@ -815,6 +808,54 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
     plt.close('all')
+    
+    
+def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
+    assert os.path.exists(DATA_DIR)
+    OUT_DIR = os.path.join(DATA_DIR, 'tri')
+    DLC_DIR = os.path.join(DATA_DIR, 'dlc')
+    assert os.path.exists(DLC_DIR)
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+    # load video info
+    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
+
+    start_frame -= 1 # 0 based indexing
+    assert start_frame >= 0
+    N = end_frame-start_frame
+
+    k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
+
+    dlc_points_fpaths = glob(os.path.join(DLC_DIR, '*.h5'))
+    assert n_cams == len(dlc_points_fpaths)
+
+    # Load Measurement Data (pixels, likelihood)
+    points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
+    points_2d_df = points_2d_df[points_2d_df["frame"].between(start_frame, end_frame-1)]
+    points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
+
+    assert len(k_arr) == points_2d_df['camera'].nunique()
+
+    points_3d_df = utils.get_pairwise_3d_points_from_df(
+        points_2d_df,
+        k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
+        triangulate_points_fisheye
+    )
+
+    points_3d_df['point_index'] = points_3d_df.index
+    
+    # ========= SAVE TRIANGULATION RESULTS ========
+
+    markers = misc.get_markers()
+
+    positions = np.full((N, len(markers), 3), np.nan)
+    for i, marker in enumerate(markers):
+        marker_pts = points_3d_df[points_3d_df["marker"]==marker][["frame", "x", "y", "z"]].values
+        for frame, *pt_3d in marker_pts:
+            positions[int(frame)-start_frame, i] = pt_3d
+
+    app.save_tri(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
     
     
 # ========= MAIN ========
@@ -830,11 +871,18 @@ if __name__ == "__main__":
     ROOT_DATA_DIR = os.path.join("..", "data")
     DATA_DIR = os.path.join(ROOT_DATA_DIR, os.path.normpath(args.data_dir))
     
-    fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    print('========== Triangulation ==========\n')
+    tri(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    print('========== SBA ==========\n')
     sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    print('========== EKF ==========\n')
+    ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    print('========== FTE ==========\n')
+    fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     
-    data_fpaths = [os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
+    print('Plotting results...')
+    data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+                   os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
                    os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
                    os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
     app.plot_multiple_cheetah_reconstructions(data_fpaths, hide_lure=True, reprojections=False, dark_mode=True)

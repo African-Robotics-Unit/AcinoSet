@@ -215,8 +215,7 @@ def fix_skew_scene(cams, r_arr, t_arr, ave_cam_height=0.5):
 
 def adjust_extrinsics_manual_points(calib_func, img_pts_arr, cam_idxs_to_correct, k_arr, d_arr, r_arr, t_arr):
     """Performs Least Squares Minimization to correct the pose of misaligned cameras.
-    :param scene_fpath: path to scene*.json file that holds the scene's extrinsics
-    :param manual_pts_fpath: path to file that hold the manually-obtained image points
+    :param img_pts_arr: The 2D image points that will be used to adjust the extrinsics
     :param cam_idxs_to_correct: the index/indices of the camera(s) whose pose(s) is/are to be corrected.
     This variable must be either single integer or a 1D list of integers. Here, the cam's index corresponds
     to its index in the scene*.json file.
