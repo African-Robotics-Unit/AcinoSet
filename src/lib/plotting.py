@@ -208,11 +208,13 @@ class Cheetah(Animation):
                       4,14,5,14,14,15,15,16,
                       4,17,5,17,17,18,18,19]
         
-        colours = [[self.dark_mode]*3+[1],
-                   [0,0.5,1,1],
-                   [1,0,1,1]]
+        colours = [[self.dark_mode]*3+[1], # white if dark_mode else black
+                   [1,0,1,1],              # fuchsia/magenta
+                   [0,1,0,1],              # green
+                   [0,0.8,0.8,1]]          # light blue
         
         self.n_reconstructions = len(multiple_reconstructions)
+        assert self.n_reconstructions < 5, 'Cannot plot more than 4 reconstructions at a time'
         self.n_frames = len(multiple_reconstructions[0])
         self.frame = 0
         
@@ -295,7 +297,7 @@ def plot_extrinsics(scene_fpath, pts_2d, fnames, triangulate_func, manual_points
     scene = Scene(scene_fpath, **kwargs)
 
     colors = [[1,0,0],                        # red: cam pair 0&1
-              [0,1,0],                        # greeen: cam pair 1&2
+              [0,1,0],                        # green: cam pair 1&2
               [kwargs.get('dark_mode', 0)]*3, # white if dark_mode else black: cam pair 2&3
               [0,0,1],                        # blue: cam pair 3&4
               [0,0.8,0.8],                    # light blue: cam pair 4&5
