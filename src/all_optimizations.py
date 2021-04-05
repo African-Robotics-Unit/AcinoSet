@@ -750,7 +750,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
                  )
     app.save_ekf(states, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
-    fig_fpath= os.path.join(OUT_DIR, 'ekf.svg')
+    fig_fpath = os.path.join(OUT_DIR, 'ekf.pdf')
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
     plt.close('all')
 
@@ -812,8 +812,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
             positions[int(frame)-start_frame, i] = pt_3d
 
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
-    if plot:
-        plt.close('all')
+    plt.close('all')
 
 
 def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
@@ -882,10 +881,10 @@ if __name__ == "__main__":
 
     # print('========== Triangulation ==========\n')
     # tri(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    print('========== SBA ==========\n')
-    sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
-    # print('========== EKF ==========\n')
-    # ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    # print('========== SBA ==========\n')
+    # sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
+    print('========== EKF ==========\n')
+    ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     # print('========== FTE ==========\n')
     # fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
 
