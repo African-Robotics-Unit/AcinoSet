@@ -19,7 +19,7 @@ from lib.calib import triangulate_points_fisheye, project_points_fisheye
 plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 
 
-def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
+def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
     # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
     # we use a redescending cost to stop outliers affecting the optimisation negatively
     redesc_a = 3
@@ -38,7 +38,8 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     ax = plt.gca()
     ax.set_ylim((-5, 50))
     ax.legend()
-    plt.show(block=False)
+    if plot:
+        plt.show(block=True)
 
     t0 = time()
 
@@ -87,7 +88,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     positions = misc.get_3d_marker_coords(x)
 
     # ========= LAMBDIFY SYMBOLIC FUNCTIONS ========
-    func_map = {"sin": sin, "cos": cos, "ImmutableDenseMatrix":np.array}
+    func_map = {"sin": sin, "cos": cos, "ImmutableDenseMatrix": np.array}
     pose_to_3d = sp.lambdify(x, positions, modules=[func_map])
     pos_funcs = []
     for i in range(positions.shape[0]):
@@ -451,7 +452,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
-    fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
+    fig_fpath= os.path.join(OUT_DIR, 'fte.pdf')
     app.plot_cheetah_states(x, out_fpath=fig_fpath)
     plt.close('all')
 
@@ -883,10 +884,10 @@ if __name__ == "__main__":
     # tri(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     # print('========== SBA ==========\n')
     # sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
-    print('========== EKF ==========\n')
-    ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    # print('========== FTE ==========\n')
-    # fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    # print('========== EKF ==========\n')
+    # ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    print('========== FTE ==========\n')
+    fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
 
     # print('Plotting results...')
     # data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
