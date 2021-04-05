@@ -755,7 +755,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     plt.close('all')
 
 
-def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
+def sba(DATA_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
     t0 = time()
 
     assert os.path.exists(DATA_DIR)
@@ -792,13 +792,14 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     app.stop_logging()
 
-    plt.plot(residuals['before'], label="Cost before")
-    plt.plot(residuals['after'], label="Cost after")
+    plt.plot(residuals['before'], alpha=0.5, label="Cost before")
+    plt.plot(residuals['after'], alpha=0.5, label="Cost after")
     plt.legend()
-    fig_fpath = os.path.join(OUT_DIR, 'sba.svg')
+    fig_fpath = os.path.join(OUT_DIR, 'sba.pdf')
     plt.savefig(fig_fpath, transparent=True)
     print(f'Saved {fig_fpath}\n')
-    plt.show(block=False)
+    if plot:
+        plt.show(block=True)
 
     # ========= SAVE SBA RESULTS ========
 
@@ -811,7 +812,8 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
             positions[int(frame)-start_frame, i] = pt_3d
 
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
-    plt.close('all')
+    if plot:
+        plt.close('all')
 
 
 def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
@@ -866,12 +868,13 @@ def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
 # ========= MAIN ========
 
 if __name__ == "__main__":
-    # python all_optimizations.py --data_dir /data/2019_03_07/phantom/flick
+    # python all_optimizations.py --data_dir /data/2019_03_07/phantom/flick --plot
     parser = ArgumentParser(description='All Optimizations')
     parser.add_argument('--data_dir', type=str, help='The data directory path to the flick/run to be optimized')
     parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start at')
     parser.add_argument('--end_frame', type=int, default=-1, help='The frame at which the optimized reconstruction will end at')
     parser.add_argument('--dlc_thresh', type=float, default=0.8, help='The likelihood of the dlc points below which will be excluded from the optimization')
+    parser.add_argument('--plot', action='store_true', help='Showing plots')
     args = parser.parse_args()
 
     ROOT_DATA_DIR = os.path.join("..", "data")
@@ -880,7 +883,7 @@ if __name__ == "__main__":
     # print('========== Triangulation ==========\n')
     # tri(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     print('========== SBA ==========\n')
-    sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
     # print('========== EKF ==========\n')
     # ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     # print('========== FTE ==========\n')
