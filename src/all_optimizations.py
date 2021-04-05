@@ -886,14 +886,16 @@ if __name__ == "__main__":
     # sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
     # print('========== EKF ==========\n')
     # ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    print('========== FTE ==========\n')
-    fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
+    # print('========== FTE ==========\n')
+    # fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh, plot=args.plot)
 
-    # print('Plotting results...')
-    # data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
-    #                os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
-    #                os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
-    #                os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
-    # for path in data_fpaths:
-    #     os.makedirs(str(pathlib.Path(path).resolve().parent), exist_ok=True)
-    # app.plot_multiple_cheetah_reconstructions(data_fpaths, hide_lure=True, reprojections=False, dark_mode=True)
+    print('Plotting results...')
+    data_fpaths = [
+        os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+        os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
+        os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
+        os.path.join(DATA_DIR, 'fte', 'fte.pickle')
+    ]
+    for path in data_fpaths:
+        os.makedirs(str(pathlib.Path(path).resolve().parent), exist_ok=True)
+    app.plot_multiple_cheetah_reconstructions(data_fpaths, hide_lure=False, reprojections=False, dark_mode=True)
