@@ -9,7 +9,7 @@ docker run -it --rm \
     -v "$CURRENT_PATH":/workdir \
     -v /disk2/naoya/AcinoSet:/data \
     -w /workdir \
-    -p 8888:8888 \
+    -p 6080:80 \
     ${IMAGE_NAME} \
     /bin/bash
     # /bin/bash -c " \

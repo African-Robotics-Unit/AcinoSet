@@ -7,6 +7,7 @@ import numpy as np
 import sympy as sp
 import pandas as pd
 import matplotlib.pyplot as plt
+import pathlib
 from glob import glob
 from time import time
 from scipy.stats import linregress
@@ -17,7 +18,7 @@ from lib.calib import triangulate_points_fisheye, project_points_fisheye
 
 plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 
-    
+
 def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
     # we use a redescending cost to stop outliers affecting the optimisation negatively
@@ -26,10 +27,10 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     redesc_c = 20
 
     # plot
-    r_x = np.arange(-20,20, 1e-1)
+    r_x = np.arange(-20, 20, 1e-1)
     r_y1 = [misc.redescending_loss(i, redesc_a, redesc_b, redesc_c) for i in r_x]
     r_y2 = abs(r_x)
-    r_y3 = r_x**2
+    r_y3 = r_x ** 2
     plt.figure()
     plt.plot(r_x,r_y1, label="Redescending")
     plt.plot(r_x,r_y2, label="Absolute (linear)")
@@ -52,11 +53,12 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
     assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
+    end_frame = tot_frames if end_frame == -1 else end_frame
 
-    start_frame -= 1; # 0 based indexing
+    start_frame -= 1    # 0 based indexing
     assert start_frame >= 0
-    N = end_frame-start_frame
-    Ts = 1.0/fps # timestep
+    N = end_frame - start_frame
+    Ts = 1.0 / fps  # timestep
 
     # ========= POSE FUNCTIONS ========
 
@@ -68,7 +70,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         a = x_2d/z_2d
         b = y_2d/z_2d
         #fisheye params
-        r = (a**2 + b**2 +1e-12)**0.5 
+        r = (a**2 + b**2 +1e-12)**0.5
         th = atan(r)
         #distortion
         th_D = th * (1 + D[0]*th**2 + D[1]*th**4 + D[2]*th**6 + D[3]*th**8)
@@ -85,7 +87,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     positions = misc.get_3d_marker_coords(x)
 
     # ========= LAMBDIFY SYMBOLIC FUNCTIONS ========
-    func_map = {"sin":sin, "cos":cos, "ImmutableDenseMatrix":np.array} 
+    func_map = {"sin": sin, "cos": cos, "ImmutableDenseMatrix":np.array}
     pose_to_3d = sp.lambdify(x, positions, modules=[func_map])
     pos_funcs = []
     for i in range(positions.shape[0]):
@@ -289,7 +291,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         if n > 1:
             return m.dx[n,p] == m.dx[n-1,p] + m.Ts*m.ddx[n,p]
         else:
-            return Constraint.Skip 
+            return Constraint.Skip
     m.integrate_v = Constraint(m.N, m.P, rule = backwards_euler_vel)
 
     # MODEL
@@ -297,10 +299,10 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         if n > 1:
             return m.ddx[n,p] == m.ddx[n-1,p] + m.slack_model[n,p]
         else:
-            return Constraint.Skip 
+            return Constraint.Skip
     m.constant_acc = Constraint(m.N, m.P, rule = constant_acc)
 
-    # MEASUREMENT 
+    # MEASUREMENT
     def measurement_constraints(m, n, c, l, d2):
         #project
         K, D, R, t = K_arr[c-1], D_arr[c-1], R_arr[c-1], t_arr[c-1]
@@ -361,7 +363,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         return abs(m.x[n,idx['theta_5']]) <= np.pi/1.5
     m.tail_mid_theta_5 = Constraint(m.N, rule=tail_mid_theta_5)
     def tail_mid_psi_5(m,n):
-        return abs(m.x[n,idx['psi_5']]) <= np.pi/1.5 
+        return abs(m.x[n,idx['psi_5']]) <= np.pi/1.5
     m.tail_mid_psi_5 = Constraint(m.N, rule=tail_mid_psi_5)
 
     #Front left leg
@@ -452,8 +454,8 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
     app.plot_cheetah_states(x, out_fpath=fig_fpath)
     plt.close('all')
-    
-    
+
+
 def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # ========= INIT VARS ========
 
@@ -483,6 +485,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
     assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
+    end_frame = tot_frames if end_frame == -1 else end_frame
 
     # Load extrinsic params
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
@@ -572,7 +575,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     try:
         lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
-        lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
+        lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1])
         lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
 
         lure_x_est = start_frame*lure_x_slope + lure_x_intercept # initial lure x
@@ -586,7 +589,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
 
     nose_pts = points_3d_df[points_3d_df["marker"]=="nose"][["frame", "x", "y", "z"]].values
-    nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1]) 
+    nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
     nose_y_slope, nose_y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
 
     nose_x_est = start_frame*nose_x_slope + nose_x_intercept # initial nose x
@@ -766,6 +769,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
     assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
+    end_frame = tot_frames if end_frame == -1 else end_frame
 
     start_frame -= 1 # 0 based indexing
     assert start_frame >= 0
@@ -808,8 +812,8 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
     plt.close('all')
-    
-    
+
+
 def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
     assert os.path.exists(DATA_DIR)
     OUT_DIR = os.path.join(DATA_DIR, 'tri')
@@ -820,6 +824,7 @@ def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
     assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
+    end_frame = tot_frames if end_frame == -1 else end_frame
 
     start_frame -= 1 # 0 based indexing
     assert start_frame >= 0
@@ -844,7 +849,7 @@ def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
     )
 
     points_3d_df['point_index'] = points_3d_df.index
-    
+
     # ========= SAVE TRIANGULATION RESULTS ========
 
     markers = misc.get_markers()
@@ -856,34 +861,36 @@ def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
             positions[int(frame)-start_frame, i] = pt_3d
 
     app.save_tri(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
-    
-    
+
+
 # ========= MAIN ========
-    
+
 if __name__ == "__main__":
+    # python all_optimizations.py --data_dir /data/2019_03_07/phantom/flick
     parser = ArgumentParser(description='All Optimizations')
-    parser.add_argument('data_dir', type=str, help='The data directory path to the flick/run to be optimized')
-    parser.add_argument('start_frame', type=int, help='The frame at which the optimized reconstruction will start at')
-    parser.add_argument('end_frame', type=int, help='The frame at which the optimized reconstruction will end at')
-    parser.add_argument('dlc_thresh', type=float, default=0.8, help='The likelihood of the dlc points below which will be excluded from the optimization')
+    parser.add_argument('--data_dir', type=str, help='The data directory path to the flick/run to be optimized')
+    parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start at')
+    parser.add_argument('--end_frame', type=int, default=-1, help='The frame at which the optimized reconstruction will end at')
+    parser.add_argument('--dlc_thresh', type=float, default=0.8, help='The likelihood of the dlc points below which will be excluded from the optimization')
     args = parser.parse_args()
-    
+
     ROOT_DATA_DIR = os.path.join("..", "data")
     DATA_DIR = os.path.join(ROOT_DATA_DIR, os.path.normpath(args.data_dir))
-    
-    print('========== Triangulation ==========\n')
-    tri(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+
+    # print('========== Triangulation ==========\n')
+    # tri(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     print('========== SBA ==========\n')
     sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    print('========== EKF ==========\n')
-    ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    print('========== FTE ==========\n')
-    fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    
-    print('Plotting results...')
-    data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
-                   os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
-                   os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
-                   os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
-    app.plot_multiple_cheetah_reconstructions(data_fpaths, hide_lure=True, reprojections=False, dark_mode=True)
-    
+    # print('========== EKF ==========\n')
+    # ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    # print('========== FTE ==========\n')
+    # fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+
+    # print('Plotting results...')
+    # data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+    #                os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
+    #                os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
+    #                os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
+    # for path in data_fpaths:
+    #     os.makedirs(str(pathlib.Path(path).resolve().parent), exist_ok=True)
+    # app.plot_multiple_cheetah_reconstructions(data_fpaths, hide_lure=True, reprojections=False, dark_mode=True)
