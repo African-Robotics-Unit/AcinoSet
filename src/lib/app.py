@@ -248,7 +248,7 @@ def get_vid_info(path_dir, vid_extension='mp4'):
     return (vid.width(), vid.height()), vid.fps(), vid.frame_count(), vid.codec()
 
 
-def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputframerate=None, out_dir=None, draw_skeleton=False, pcutoff=0.5, dotsize=6, colormap='jet'):
+def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputframerate=None, out_dir=None, draw_skeleton=False, pcutoff=0.5, dotsize=6, colormap='jet', skeleton_color='white'):
     from functools import partial
     from multiprocessing import Pool
 
@@ -264,7 +264,7 @@ def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputfra
     if out_dir is None:
         out_dir = os.path.relpath(os.path.dirname(video_fpaths[0]), os.getcwd())
 
-    func = partial(proc_video, out_dir, bodyparts, codec, bodyparts2connect, outputframerate, draw_skeleton, pcutoff, dotsize, colormap)
+    func = partial(proc_video, out_dir, bodyparts, codec, bodyparts2connect, outputframerate, draw_skeleton, pcutoff, dotsize, colormap, skeleton_color)
 
     with Pool(min(os.cpu_count(), len(video_fpaths))) as pool:
         pool.map(func,video_fpaths)
