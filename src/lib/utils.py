@@ -178,28 +178,31 @@ def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=Tru
             
 def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project_func, start_frame, save_as_csv=True, out_fname=None):
     assert os.path.dirname(os.path.dirname(scene_fpath)) in out_dir, 'scene_fpath does not belong to the same parent folder as out_dir'
-    
+
     video_fpaths = glob(os.path.join(out_dir, 'cam[1-9].mp4')) # check current dir for videos
     if not video_fpaths:
         video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # check parent dir for videos
-    
+
     if video_fpaths:
         k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_fpath, verbose=False)
         assert len(k_arr)==len(video_fpaths)
-        
+
         xyz_labels = ['x', 'y', 'likelihood'] # same format as DLC
         pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
-        
+
         positions_3d = np.array(positions_3d)
         n_frames = len(positions_3d)
-        
+
         out_fname = os.path.basename(out_dir) if out_fname is None else out_fname
-        
+
         for i in range(len(video_fpaths)):
-            cam_params = [k_arr[i], d_arr[i], r_arr[i], t_arr[i]]
+            projections = project_func(positions_3d, k_arr[i], d_arr[i], r_arr[i], t_arr[i])
+            out_of_range_indices = np.where((projections > cam_res) | (projections < [0]*2))[0]
+            projections[out_of_range_indices] = np.nan
+
             data = np.full(positions_3d.shape, np.nan)
-            data[:, :, 0:2] = project_func(positions_3d, *cam_params).reshape((n_frames,-1, 2))
-            
+            data[:, :, 0:2] = projections.reshape((n_frames,-1, 2))
+
             cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
             fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
 
@@ -207,14 +210,14 @@ def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project
             if save_as_csv:
                 df.to_csv(os.path.splitext(fpath)[0] + ".csv")
             df.to_hdf(fpath, f"{out_fname}_df", format="table", mode="w")
-    
+
         fpath = fpath.replace(cam_name, 'cam*')
         print('Saved', fpath)
         if save_as_csv:
             print('Saved', os.path.splitext(fpath)[0] + ".csv")
         print()
     else:
-        print('Could not save 3D cheetah as 2D - No videos were found in', out_dir, 'or', os.path.dirname(out_dir))
+        print('Could not save 3D cheetah to 2D - No videos were found in', out_dir, 'or', os.path.dirname(out_dir))
 
 # ========== OTHER ==========
 

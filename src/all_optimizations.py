@@ -12,15 +12,13 @@ from time import time
 from scipy.stats import linregress
 from pyomo.environ import *
 from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
-from lib import utils, app
+from lib import misc, utils, app
+from lib.calib import triangulate_points_fisheye, project_points_fisheye
 
 plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 
-    
-def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
-    from lib import misc
-    from lib.calib import triangulate_points_fisheye
 
+def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
     # we use a redescending cost to stop outliers affecting the optimisation negatively
     redesc_a = 3
@@ -53,15 +51,142 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
     start_frame -= 1; # 0 based indexing
     assert start_frame >= 0
     N = end_frame-start_frame
     Ts = 1.0/fps # timestep
 
-    # ========= POSE FUNCTIONS ========
+    ## ========= POSE FUNCTIONS ========
+    #SYMBOLIC ROTATION MATRIX FUNCTIONS
+    def rot_x(x):
+        c = sp.cos(x)
+        s = sp.sin(x)
+        return sp.Matrix([
+            [1, 0, 0],
+            [0, c, s],
+            [0, -s, c]
+        ])
 
+    def rot_y(y):
+        c = sp.cos(y)
+        s = sp.sin(y)
+        return sp.Matrix([
+            [c, 0, -s],
+            [0, 1, 0],
+            [s, 0, c]
+        ])
+
+    def rot_z(z):
+        c = sp.cos(z)
+        s = sp.sin(z)
+        return sp.Matrix([
+            [c, s, 0],
+            [-s, c, 0],
+            [0, 0, 1]
+        ])
+
+    L = 14  # number of joints in the cheetah model
+
+    # defines arrays of angles, velocities and accelerations
+    phi     = [sp.symbols(f"\\phi_{{{l}}}")   for l in range(L)]
+    theta   = [sp.symbols(f"\\theta_{{{l}}}") for l in range(L)]
+    psi     = [sp.symbols(f"\\psi_{{{l}}}")   for l in range(L)]
+
+    #ROTATIONS
+    RI_0 = rot_z(psi[0]) @ rot_x(phi[0]) @ rot_y(theta[0]) # head
+    R0_I = RI_0.T
+    RI_1 = rot_z(psi[1]) @ rot_x(phi[1]) @ rot_y(theta[1]) @ RI_0 # neck
+    R1_I = RI_1.T
+    RI_2 = rot_y(theta[2]) @ RI_1 # front torso
+    R2_I = RI_2.T
+    RI_3 = rot_z(psi[3])@ rot_x(phi[3]) @ rot_y(theta[3]) @ RI_2 # back torso
+    R3_I = RI_3.T
+    RI_4 = rot_z(psi[4]) @ rot_y(theta[4]) @ RI_3 # tail base
+    R4_I = RI_4.T
+    RI_5 = rot_z(psi[5]) @ rot_y(theta[5]) @ RI_4 # tail mid
+    R5_I = RI_5.T
+    RI_6 = rot_y(theta[6]) @ RI_2 # l_shoulder
+    R6_I = RI_6.T
+    RI_7 = rot_y(theta[7]) @ RI_6 # l_front_knee
+    R7_I = RI_7.T
+    RI_8 = rot_y(theta[8]) @ RI_2 # r_shoulder
+    R8_I = RI_8.T
+    RI_9 = rot_y(theta[9]) @ RI_8 # r_front_knee
+    R9_I = RI_9.T
+    RI_10 = rot_y(theta[10]) @ RI_3 # l_hip
+    R10_I = RI_10.T
+    RI_11 = rot_y(theta[11]) @ RI_10 # l_back_knee
+    R11_I = RI_11.T
+    RI_12 = rot_y(theta[12]) @ RI_3 # r_hip
+    R12_I = RI_12.T
+    RI_13 = rot_y(theta[13]) @ RI_12 # r_back_knee
+    R13_I = RI_13.T
+
+    # defines the position, velocities and accelerations in the inertial frame
+    x,   y,   z   = sp.symbols("x y z")
+    dx,  dy,  dz  = sp.symbols("\\dot{x} \\dot{y} \\dot{z}")
+    ddx, ddy, ddz = sp.symbols("\\ddot{x} \\ddot{y} \\ddot{z}")
+    # x_l, y_l, z_l = sp.symbols("x_l y_l z_l") # exclude lure for now
+
+
+    # SYMBOLIC CHEETAH POSE POSITIONS
+    p_head          = sp.Matrix([x, y, z])
+
+    p_l_eye         = p_head         + R0_I  @ sp.Matrix([0, 0.03, 0])
+    p_r_eye         = p_head         + R0_I  @ sp.Matrix([0, -0.03, 0])
+    p_nose          = p_head         + R0_I  @ sp.Matrix([0.055, 0, -0.055])
+
+    p_neck_base     = p_head         + R1_I  @ sp.Matrix([-0.28, 0, 0])
+    p_spine         = p_neck_base    + R2_I  @ sp.Matrix([-0.37, 0, 0])
+
+    p_tail_base     = p_spine        + R3_I  @ sp.Matrix([-0.37, 0, 0])
+    p_tail_mid      = p_tail_base    + R4_I  @ sp.Matrix([-0.28, 0, 0])
+    p_tail_tip      = p_tail_mid     + R5_I  @ sp.Matrix([-0.36, 0, 0])
+
+    p_l_shoulder    = p_neck_base    + R2_I  @ sp.Matrix([-0.04, 0.08, -0.10])
+    p_l_front_knee  = p_l_shoulder   + R6_I  @ sp.Matrix([0, 0, -0.24])
+    p_l_front_ankle = p_l_front_knee + R7_I  @ sp.Matrix([0, 0, -0.28])
+
+    p_r_shoulder    = p_neck_base    + R2_I  @ sp.Matrix([-0.04, -0.08, -0.10])
+    p_r_front_knee  = p_r_shoulder   + R8_I  @ sp.Matrix([0, 0, -0.24])
+    p_r_front_ankle = p_r_front_knee + R9_I  @ sp.Matrix([0, 0, -0.28])
+
+    p_l_hip         = p_tail_base    + R3_I  @ sp.Matrix([0.12, 0.08, -0.06])
+    p_l_back_knee   = p_l_hip        + R10_I @ sp.Matrix([0, 0, -0.32])
+    p_l_back_ankle  = p_l_back_knee  + R11_I @ sp.Matrix([0, 0, -0.25])
+
+    p_r_hip         = p_tail_base    + R3_I  @ sp.Matrix([0.12, -0.08, -0.06])
+    p_r_back_knee   = p_r_hip        + R12_I @ sp.Matrix([0, 0, -0.32])
+    p_r_back_ankle  = p_r_back_knee  + R13_I @ sp.Matrix([0, 0, -0.25])
+
+    # p_lure          = sp.Matrix([x_l, y_l, z_l])
+
+    # ========= LAMBDIFY SYMBOLIC FUNCTIONS ========
+    positions = sp.Matrix([
+        p_l_eye.T, p_r_eye.T, p_nose.T,
+        p_neck_base.T, p_spine.T,
+        p_tail_base.T, p_tail_mid.T, p_tail_tip.T,
+        p_l_shoulder.T, p_l_front_knee.T, p_l_front_ankle.T,
+        p_r_shoulder.T, p_r_front_knee.T, p_r_front_ankle.T,
+        p_l_hip.T, p_l_back_knee.T, p_l_back_ankle.T,
+        p_r_hip.T, p_r_back_knee.T, p_r_back_ankle.T,
+    #     p_lure.T
+    ])
+
+    func_map = {"sin":sin, "cos":cos, "ImmutableDenseMatrix":np.array} 
+    sym_list = [x, y, z,
+                *phi, *theta, *psi, 
+    #             x_l, y_l, z_l
+               ]
+    pose_to_3d = sp.lambdify(sym_list, positions, modules=[func_map])
+    pos_funcs = []
+    for i in range(positions.shape[0]):
+        lamb = sp.lambdify(sym_list, positions[i,:], modules=[func_map])
+        pos_funcs.append(lamb)
+
+    # ========= PROJECTION FUNCTIONS ========
     def pt3d_to_2d(x, y, z, K, D, R, t):
         x_2d = x*R[0,0] + y*R[0,1] + z*R[0,2] + t.flatten()[0]
         y_2d = x*R[1,0] + y*R[1,1] + z*R[1,2] + t.flatten()[1]
@@ -80,63 +205,6 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         v = K[1,1]*y_P + K[1,2]
         return u, v
 
-
-    # SYMBOLIC CHEETAH POSE POSITIONS
-    idx = misc.get_pose_params()
-    x = sp.symbols(list(idx.keys()))
-    positions = misc.get_3d_marker_coords(x)
-
-    # ========= LAMBDIFY SYMBOLIC FUNCTIONS ========
-    func_map = {"sin":sin, "cos":cos, "ImmutableDenseMatrix":np.array} 
-    pose_to_3d = sp.lambdify(x, positions, modules=[func_map])
-    pos_funcs = []
-    for i in range(positions.shape[0]):
-        lamb = sp.lambdify(x, positions[i,:], modules=[func_map])
-        pos_funcs.append(lamb)
-
-    # ========= IMPORT CAMERA & SCENE PARAMS ========
-    K_arr, D_arr, R_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
-    D_arr = D_arr.reshape((-1,4))
-    assert res == cam_res
-
-    # ========= IMPORT DATA ========
-
-    R = 5 # measurement standard deviation
-
-    Q_list = [ # model parameters variance
-        4, 7, 5,    # head position in inertial
-        13, 9, 26,  # head rotation in inertial
-        32, 18, 12, # neck
-        43,         # front torso
-        10, 53, 34, # back torso
-        90, 43,     # tail_base
-        118, 51,    # tail_mid
-        247, 186,   # l_shoulder, l_front_knee
-        194, 164,   # r_shoulder, r_front_knee
-        295, 243,   # l_hip, l_back_knee
-        334, 149    # r_hip, r_back_knee
-    ]
-    Q_list += Q_list[0:3] # lure's x, y, z variance - same as head
-    Q = np.array(Q_list, dtype=np.float64)**2
-
-    markers = misc.get_markers()
-
-    def get_meas_from_df(n, c, l, d):
-        n_mask = points_2d_df["frame"] == n-1
-        l_mask = points_2d_df["marker"] == markers[l-1]
-        c_mask = points_2d_df["camera"] == c-1
-        d_idx = {1:"x", 2:"y"}
-        val = points_2d_df[n_mask & l_mask & c_mask]
-        return val[d_idx[d]].values[0]
-
-    def get_likelihood_from_df(n, c, l):
-        n_mask = points_2d_df["frame"] == n-1
-        l_mask = points_2d_df["marker"] == markers[l-1]
-        c_mask = points_2d_df["camera"] == c-1
-        val = points_2d_df[n_mask & l_mask & c_mask]
-        return val["likelihood"].values[0]
-
-    # ========= PROJECTION FUNCTIONS ========
     def pt3d_to_x2d(x, y, z, K, D, R, t):
         u = pt3d_to_2d(x, y, z, K, D, R, t)[0]
         return u
@@ -145,11 +213,46 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         v = pt3d_to_2d(x, y, z, K, D, R, t)[1]
         return v
 
+    # ========= IMPORT CAMERA & SCENE PARAMS ========
+    K_arr, D_arr, R_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
+    D_arr = D_arr.reshape((-1,4))
+
+    # ========= IMPORT DATA ========
+    markers = misc.get_markers()
+
+    def get_meas_from_df(n, c, l, d):
+        n_mask = points_2d_df["frame"]== n-1
+        l_mask = points_2d_df["marker"]== markers[l-1]
+        c_mask = points_2d_df["camera"]== c-1
+        d_idx = {1:"x", 2:"y"}
+        val = points_2d_df[n_mask & l_mask & c_mask]
+        return val[d_idx[d]].values[0]
+
+    def get_likelihood_from_df(n, c, l):
+        n_mask = points_2d_df["frame"]== n-1
+        l_mask = points_2d_df["marker"]== markers[l-1]
+        c_mask = points_2d_df["camera"]== c-1
+        val = points_2d_df[n_mask & l_mask & c_mask]
+        return val["likelihood"].values[0]
+
     proj_funcs = [pt3d_to_x2d, pt3d_to_y2d]
+
+    R = 5 # measurement standard deviation
+
+    Q = [ # model parameters variance
+        4, 7, 5, # x, y, z
+        13, 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, #  phi_1, ... , phi_14
+        9, 18, 43, 53, 90, 118, 247, 186, 194, 164, 295, 243, 334, 149, # theta_1, ... , theta_n
+        26, 12, 0, 34, 43, 51, 0, 0, 0, 0, 0, 0, 0, 0, # psi_1, ... , psi_n
+    #     ?, ?, ? # lure's x, y, z variance
+    ]
+    Q = np.array(Q, dtype=np.float64)**2
 
     #===================================================
     #                   Load in data
     #===================================================
+    print("Loading data")
+
     df_paths = glob(os.path.join(DLC_DIR, '*.h5'))
 
     points_2d_df = utils.load_dlc_points_as_df(df_paths, verbose=False)
@@ -159,20 +262,31 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         triangulate_points_fisheye
     )
 
+    # estimate initial points
+    nose_pts = points_3d_df[points_3d_df["marker"]=="nose"][["frame", "x", "y", "z"]].values
+    x_slope, x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
+    y_slope, y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
+    z_slope, z_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,3])
+    frame_est = np.arange(end_frame)
+    x_est = frame_est*x_slope + x_intercept
+    y_est = frame_est*y_slope + y_intercept
+    z_est = frame_est*z_slope + z_intercept
+    psi_est = np.arctan2(y_slope, x_slope)
+
     #===================================================
     #                   Optimisation
     #===================================================
-    print("Started Optimisation")
+    print("\nStarted Optimisation")
     m = ConcreteModel(name = "Cheetah from measurements")
     m.Ts = Ts
 
     # ===== SETS =====
     N = end_frame-start_frame # number of timesteps in trajectory
-    P = len(x)                # number of pose parameters
-    L = len(pos_funcs)        # number of dlc labels per frame
-    C = n_cams                # number of cameras
-    D2 = 2                    # dimensionality of measurements (image points)
-    D3 = 3                    # dimensionality of measurements (3d points)
+    P = 3 + len(phi)+len(theta)+len(psi)# + 3  # number of pose parameters (x, y, z, phi_1..n, theta_1..n, psi_1..n, x_l, y_l, z_l)
+    L = len(pos_funcs) # number of dlc labels per frame
+    C = len(K_arr) # number of cameras
+    D2 = 2 # dimensionality of measurements
+    D3 = 3 # dimensionality of measurements
 
     m.N = RangeSet(N)
     m.P = RangeSet(P)
@@ -205,52 +319,21 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
     m.meas = Param(m.N, m.C, m.L, m.D2, initialize=init_measurements_df)
 
     # ===== VARIABLES =====
-    m.x = Var(m.N, m.P)   # position
-    m.dx = Var(m.N, m.P)  # velocity
-    m.ddx = Var(m.N, m.P) # acceleration
+    m.x = Var(m.N, m.P) #position
+    m.dx = Var(m.N, m.P) #velocity
+    m.ddx = Var(m.N, m.P) #acceleration
     m.poses = Var(m.N, m.L, m.D3)
     m.slack_model = Var(m.N, m.P)
     m.slack_meas = Var(m.N, m.C, m.L, m.D2, initialize=0.0)
 
     # ===== VARIABLES INITIALIZATION =====
-
-    # estimate initial points
-    frame_est = np.arange(end_frame)
     init_x = np.zeros((N, P))
+    init_x[:,0] = x_est[start_frame: start_frame+N] #x # change this to [start_frame: end_frame]?
+    init_x[:,1] = y_est[start_frame: start_frame+N] #y
+    init_x[:,2] = z_est[start_frame: start_frame+N] #z
+    init_x[:,31] = psi_est # yaw = psi
     init_dx = np.zeros((N, P))
     init_ddx = np.zeros((N, P))
-
-    try:
-        lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
-        lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1])
-        lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
-        lure_z_slope, lure_z_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,3])
-        lure_x_est = frame_est*lure_x_slope + lure_x_intercept
-        lure_y_est = frame_est*lure_y_slope + lure_y_intercept
-        lure_z_est = frame_est*lure_z_slope + lure_z_intercept
-
-        init_x[:,idx['x_l']] = lure_x_est[start_frame: end_frame] # x
-        init_x[:,idx['y_l']] = lure_y_est[start_frame: end_frame] # y
-        init_x[:,idx['z_l']] = lure_z_est[start_frame: end_frame] # z
-    except ValueError as e: # for when there is no lure data
-        print(f"Lure initialisation error: '{e}' -> Lure states initialised to zero")
-
-    points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
-
-    nose_pts = points_3d_df[points_3d_df["marker"]=="nose"][["frame", "x", "y", "z"]].values
-    nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
-    nose_y_slope, nose_y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
-    nose_z_slope, nose_z_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,3])
-    nose_x_est = frame_est*nose_x_slope + nose_x_intercept
-    nose_y_est = frame_est*nose_y_slope + nose_y_intercept
-    nose_z_est = frame_est*nose_z_slope + nose_z_intercept
-    psi_est = np.arctan2(nose_y_slope, nose_x_slope)
-
-    init_x[:,idx['x_0']] = nose_x_est[start_frame: end_frame] # x
-    init_x[:,idx['y_0']] = nose_y_est[start_frame: end_frame] # y
-    init_x[:,idx['z_0']] = nose_z_est[start_frame: end_frame] # z
-    init_x[:,idx['psi_0']] = psi_est # yaw = psi
-
     for n in m.N:
         for p in m.P:
             if n<len(init_x): #init using known values
@@ -275,12 +358,14 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         var_list = [m.x[n,p] for p in range(1, P+1)]
         [pos] = pos_funcs[l-1](*var_list)
         return pos[d3-1] == m.poses[n,l,d3]
+
     m.pose_constraint = Constraint(m.N, m.L, m.D3, rule=pose_constraint)
 
     # INTEGRATION
-    print("Initialising numerical integration")
+    print("Numerical integration")
     def backwards_euler_pos(m,n,p): # position
         if n > 1:
+    #             return m.x[n,p] == m.x[n-1,p] + m.h*m.dx[n-1,p] + m.h**2 * m.ddx[n-1,p]/2
             return m.x[n,p] == m.x[n-1,p] + m.Ts*m.dx[n,p]
 
         else:
@@ -307,95 +392,91 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
         #project
         K, D, R, t = K_arr[c-1], D_arr[c-1], R_arr[c-1], t_arr[c-1]
         x, y, z = m.poses[n,l,1], m.poses[n,l,2], m.poses[n,l,3]
-        return proj_funcs[d2-1](x, y, z, K, D, R, t) - m.meas[n, c, l, d2] - m.slack_meas[n, c, l, d2] == 0
+        return proj_funcs[d2-1](x, y, z, K, D, R, t) - m.meas[n, c, l, d2] - m.slack_meas[n, c, l, d2] ==0
     m.measurement = Constraint(m.N, m.C, m.L, m.D2, rule = measurement_constraints)
 
-    #===== POSE CONSTRAINTS =====
-    # Note 1 based indexing for pyomo!!!!...@#^!@#&
-    for state in idx:
-        idx[state] += 1
-
+    #===== POSE CONSTRAINTS (Note 1 based indexing for pyomo!!!!...@#^!@#&) =====
     #Head
     def head_psi_0(m,n):
-        return abs(m.x[n,idx['psi_0']]) <= np.pi/6
+        return abs(m.x[n,4]) <= np.pi/6
     m.head_psi_0 = Constraint(m.N, rule=head_psi_0)
     def head_theta_0(m,n):
-        return abs(m.x[n,idx['theta_0']]) <= np.pi/6
+        return abs(m.x[n,18]) <= np.pi/6
     m.head_theta_0 = Constraint(m.N, rule=head_theta_0)
 
     #Neck
     def neck_phi_1(m,n):
-        return abs(m.x[n,idx['phi_1']]) <= np.pi/6
+        return abs(m.x[n,5]) <= np.pi/6
     m.neck_phi_1 = Constraint(m.N, rule=neck_phi_1)
     def neck_theta_1(m,n):
-        return abs(m.x[n,idx['theta_1']]) <= np.pi/6
+        return abs(m.x[n,19]) <= np.pi/6
     m.neck_theta_1 = Constraint(m.N, rule=neck_theta_1)
     def neck_psi_1(m,n):
-        return abs(m.x[n,idx['psi_1']]) <= np.pi/6
+        return abs(m.x[n,33]) <= np.pi/6
     m.neck_psi_1 = Constraint(m.N, rule=neck_psi_1)
 
     #Front torso
     def front_torso_theta_2(m,n):
-        return abs(m.x[n,idx['theta_2']]) <= np.pi/6
+        return abs(m.x[n,20]) <= np.pi/6
     m.front_torso_theta_2 = Constraint(m.N, rule=front_torso_theta_2)
 
     #Back torso
     def back_torso_theta_3(m,n):
-        return abs(m.x[n,idx['theta_3']]) <= np.pi/6
+        return abs(m.x[n,21]) <= np.pi/6
     m.back_torso_theta_3 = Constraint(m.N, rule=back_torso_theta_3)
     def back_torso_phi_3(m,n):
-        return abs(m.x[n,idx['phi_3']]) <= np.pi/6
+        return abs(m.x[n,7]) <= np.pi/6
     m.back_torso_phi_3 = Constraint(m.N, rule=back_torso_phi_3)
     def back_torso_psi_3(m,n):
-        return abs(m.x[n,idx['psi_3']]) <= np.pi/6
+        return abs(m.x[n,35]) <= np.pi/6
     m.back_torso_psi_3 = Constraint(m.N, rule=back_torso_psi_3)
 
     #Tail base
     def tail_base_theta_4(m,n):
-        return abs(m.x[n,idx['theta_4']]) <= np.pi/1.5
+        return abs(m.x[n,22]) <= np.pi/1.5
     m.tail_base_theta_4 = Constraint(m.N, rule=tail_base_theta_4)
     def tail_base_psi_4(m,n):
-        return abs(m.x[n,idx['psi_4']]) <= np.pi/1.5
+        return abs(m.x[n,36]) <= np.pi/1.5
     m.tail_base_psi_4 = Constraint(m.N, rule=tail_base_psi_4)
 
     #Tail mid
     def tail_mid_theta_5(m,n):
-        return abs(m.x[n,idx['theta_5']]) <= np.pi/1.5
+        return abs(m.x[n,23]) <= np.pi/1.5
     m.tail_mid_theta_5 = Constraint(m.N, rule=tail_mid_theta_5)
     def tail_mid_psi_5(m,n):
-        return abs(m.x[n,idx['psi_5']]) <= np.pi/1.5 
+        return abs(m.x[n,37]) <= np.pi/1.5 
     m.tail_mid_psi_5 = Constraint(m.N, rule=tail_mid_psi_5)
 
     #Front left leg
     def l_shoulder_theta_6(m,n):
-        return abs(m.x[n,idx['theta_6']]) <= np.pi/2
+        return abs(m.x[n,24]) <= np.pi/2
     m.l_shoulder_theta_6 = Constraint(m.N, rule=l_shoulder_theta_6)
     def l_front_knee_theta_7(m,n):
-        return abs(m.x[n,idx['theta_7']] + np.pi/2) <= np.pi/2
+        return abs(m.x[n,25] + np.pi/2) <= np.pi/2
     m.l_front_knee_theta_7 = Constraint(m.N, rule=l_front_knee_theta_7)
 
     #Front right leg
     def r_shoulder_theta_8(m,n):
-        return abs(m.x[n,idx['theta_8']]) <= np.pi/2
+        return abs(m.x[n,26]) <= np.pi/2
     m.r_shoulder_theta_8 = Constraint(m.N, rule=r_shoulder_theta_8)
     def r_front_knee_theta_9(m,n):
-        return abs(m.x[n,idx['theta_9']] + np.pi/2) <= np.pi/2
+        return abs(m.x[n,27] + np.pi/2) <= np.pi/2
     m.r_front_knee_theta_9 = Constraint(m.N, rule=r_front_knee_theta_9)
 
     #Back left leg
     def l_hip_theta_10(m,n):
-        return abs(m.x[n,idx['theta_10']]) <= np.pi/2
+        return abs(m.x[n,28]) <= np.pi/2
     m.l_hip_theta_10 = Constraint(m.N, rule=l_hip_theta_10)
     def l_back_knee_theta_11(m,n):
-        return abs(m.x[n,idx['theta_11']] - np.pi/2) <= np.pi/2
+        return abs(m.x[n,29] - np.pi/2) <= np.pi/2
     m.l_back_knee_theta_11 = Constraint(m.N, rule=l_back_knee_theta_11)
 
     #Back right leg
     def r_hip_theta_12(m,n):
-        return abs(m.x[n,idx['theta_12']]) <= np.pi/2
+        return abs(m.x[n,30]) <= np.pi/2
     m.r_hip_theta_12 = Constraint(m.N, rule=r_hip_theta_12)
     def r_back_knee_theta_13(m,n):
-        return abs(m.x[n,idx['theta_13']] - np.pi/2) <= np.pi/2
+        return abs(m.x[n,31] - np.pi/2) <= np.pi/2
     m.r_back_knee_theta_13 = Constraint(m.N, rule=r_back_knee_theta_13)
 
     # ======= OBJECTIVE FUNCTION =======
@@ -417,7 +498,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # RUN THE SOLVER
     opt = SolverFactory(
-        'ipopt', # use this if MA86 solver is not installed
+        'ipopt',
         # executable='./CoinIpopt/build/bin/ipopt'
     )
 
@@ -443,23 +524,46 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # ===== SAVE FTE RESULTS =====
 
-    x, dx, ddx =  [], [], []
-    for n in m.N:
-        x.append([value(m.x[n, p]) for p in m.P])
-        dx.append([value(m.dx[n, p]) for p in m.P])
-        ddx.append([value(m.ddx[n, p]) for p in m.P])
+    def convert_m(m, pose_indices):
+        x_optimised, dx_optimised, ddx_optimised = [], [], []
+        for n in m.N:
+            x_optimised.append([value(m.x[n, p]) for p in m.P])
+            dx_optimised.append([value(m.dx[n, p]) for p in m.P])
+            ddx_optimised.append([value(m.ddx[n, p]) for p in m.P])
 
-    app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, scene_fpath, start_frame, dlc_thresh)
+        positions = [pose_to_3d(*states) for states in x_optimised]
+
+        # remove zero-valued vars
+        for n in m.N:
+            n -= 1 # remember pyomo's 1-based indexing
+            for p in pose_indices[::-1]:
+                    assert x_optimised[n][p] == 0
+                    del x_optimised[n][p]
+                    del dx_optimised[n][p]
+                    del ddx_optimised[n][p]
+
+        states = dict(
+            x=x_optimised,
+            dx=dx_optimised,
+            ddx=ddx_optimised,
+        )
+        return positions, states
+
+    [unused_pose_indices] = np.where(Q == 0)
+    positions, states = convert_m(m, unused_pose_indices)
+    
+    out_fpath = os.path.join(OUT_DIR, f"fte.pickle")
+    app.save_optimised_cheetah(positions, out_fpath, extra_data=dict(**states, start_frame=start_frame))
+    app.save_3d_cheetah_as_2d(positions, OUT_DIR, scene_fpath, markers, project_points_fisheye, start_frame)
+
+    video_fpaths = glob(os.path.join(os.path.dirname(OUT_DIR), 'cam[1-9].mp4')) # original vids should be in the parent dir
+    app.create_labeled_videos(video_fpaths, out_dir=OUT_DIR, draw_skeleton=True, pcutoff=dlc_thresh)
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
-    app.plot_cheetah_states(x, out_fpath=fig_fpath)
-    plt.close('all')
+    app.plot_cheetah_states(states['x'], out_fpath=fig_fpath)
     
     
 def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
-    from lib import misc
-    from lib.calib import project_points_fisheye, triangulate_points_fisheye
-    
     # ========= INIT VARS ========
 
     t0 = time()
@@ -487,7 +591,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
     # Load extrinsic params
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
@@ -575,18 +679,18 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # estimate initial points
     states = np.zeros(n_states)
 
-    try:
-        lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
-        lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
-        lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
+    # try:
+    #     lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
+    #     lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
+    #     lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
 
-        lure_x_est = start_frame*lure_x_slope + lure_x_intercept # initial lure x
-        lure_y_est = start_frame*lure_y_slope + lure_y_intercept # initial lure y
+    #     lure_x_est = start_frame*lure_x_slope + lure_x_intercept # initial lure x
+    #     lure_y_est = start_frame*lure_y_slope + lure_y_intercept # initial lure y
 
-        states[[idx['x_l'], idx['y_l']]] = [lure_x_est, lure_y_est]             # lure x & y in inertial
-        states[[idx['dx_l'], idx['dy_l']]] = [lure_x_slope/sT, lure_y_slope/sT] # lure x & y velocity in inertial
-    except ValueError as e: # for when there is no lure data
-        print(f"Lure initialisation error: '{e}' -> Lure states initialised to zero")
+    #     states[[idx['x_l'], idx['y_l']]] = [lure_x_est, lure_y_est]             # lure x & y in inertial
+    #     states[[idx['dx_l'], idx['dy_l']]] = [lure_x_slope/sT, lure_y_slope/sT] # lure x & y velocity in inertial
+    # except ValueError as e: # for when there is no lure data
+    #     print(f"Lure initialisation error: '{e}' -> Lure states initialised to zero")
 
     points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
 
@@ -605,21 +709,22 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # INITIAL STATE COVARIANCE P - how much do we trust the initial states
     # position
     p_lin_pos = np.ones(3)*3**2                       # Know initial position within 4m
-    p_ang_pos = np.ones(n_pose_params-6)*(np.pi/4)**2 # Know initial angles within 60 degrees, heading may need to change
-    p_lure_pos = p_lin_pos
+    p_ang_pos = np.ones(n_pose_params-3)*(np.pi/4)**2 # Know initial angles within 60 degrees, heading may need to change
+    # p_lure_pos = p_lin_pos
     # velocity
     p_lin_vel = np.ones(3)*5**2                       # Know this within 2.5m/s and it's a uniform random variable
-    p_ang_vel = np.ones(n_pose_params-6)*3**2
-    p_lure_vel = p_lin_vel
+    p_ang_vel = np.ones(n_pose_params-3)*3**2
+    # p_lure_vel = p_lin_vel
     # acceleration
     p_lin_acc = np.ones(3)*3**2
-    p_ang_acc = np.ones(n_pose_params-6)*3**2
+    p_ang_acc = np.ones(n_pose_params-3)*3**2
     p_ang_acc[10:] = 5**2
-    p_lure_acc = p_lin_acc
+    # p_lure_acc = p_lin_acc
 
-    P = np.diag(np.concatenate([p_lin_pos, p_ang_pos, p_lure_pos,
-                                p_lin_vel, p_ang_vel, p_lure_vel,
-                                p_lin_acc, p_ang_acc, p_lure_acc]))
+    P = np.diag(np.concatenate([p_lin_pos, p_ang_pos, #p_lure_pos,
+                                p_lin_vel, p_ang_vel, #p_lure_vel,
+                                p_lin_acc, p_ang_acc, #p_lure_acc
+                               ]))
 
     # PROCESS COVARIANCE Q - how "noisy" the constant acceleration model is
     qb_list = [
@@ -635,7 +740,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
         450.0, 400.0,     # l_hip theta, l_back_knee theta
         450.0, 400.0,     # r_hip theta, r_back_knee theta
     ]
-    qb_list += qb_list[0:3] # lure x, y, z in inertial - same as head
+    # qb_list += qb_list[0:3] # lure x, y, z in inertial - same as head
 
     qb = (np.diag(qb_list)/2)**2
     Q = np.block([
@@ -754,12 +859,9 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     fig_fpath= os.path.join(OUT_DIR, 'ekf.svg')
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
-    plt.close('all')
 
 
 def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
-    from lib.misc import get_markers
-    
     t0 = time()
 
     assert os.path.exists(DATA_DIR)
@@ -772,7 +874,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
     start_frame -= 1 # 0 based indexing
     assert start_frame >= 0
@@ -805,7 +907,7 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
 
     # ========= SAVE SBA RESULTS ========
 
-    markers = get_markers()
+    markers = misc.get_markers()
 
     positions = np.full((N, len(markers), 3), np.nan)
     for i, marker in enumerate(markers):
@@ -814,7 +916,60 @@ def sba(DATA_DIR, start_frame, end_frame, dlc_thresh):
             positions[int(frame)-start_frame, i] = pt_3d
 
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
-    plt.close('all')
+    
+    
+def tri(DATA_DIR, start_frame, end_frame, dlc_thresh):
+    assert os.path.exists(DATA_DIR)
+    OUT_DIR = os.path.join(DATA_DIR, 'tri')
+    DLC_DIR = os.path.join(DATA_DIR, 'dlc')
+    assert os.path.exists(DLC_DIR)
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+    # load video info
+    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
+
+    start_frame -= 1 # 0 based indexing
+    assert start_frame >= 0
+    N = end_frame-start_frame
+
+    k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
+
+    dlc_points_fpaths = glob(os.path.join(DLC_DIR, '*.h5'))
+    assert n_cams == len(dlc_points_fpaths)
+
+    # Load Measurement Data (pixels, likelihood)
+    points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
+    points_2d_df = points_2d_df[points_2d_df["frame"].between(start_frame, end_frame-1)]
+    points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
+
+    assert len(k_arr) == points_2d_df['camera'].nunique()
+
+    points_3d_df = utils.get_pairwise_3d_points_from_df(
+        points_2d_df,
+        k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
+        triangulate_points_fisheye
+    )
+
+    points_3d_df['point_index'] = points_3d_df.index
+    
+    # ========= SAVE TRIANGULATION RESULTS ========
+
+    markers = misc.get_markers()
+
+    positions = np.full((N, len(markers), 3), np.nan)
+    for i, marker in enumerate(markers):
+        marker_pts = points_3d_df[points_3d_df["marker"]==marker][["frame", "x", "y", "z"]].values
+        for frame, *pt_3d in marker_pts:
+            positions[int(frame)-start_frame, i] = pt_3d
+
+    app.save_tri(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
+    
+    
+def dlc(DATA_DIR, dlc_thresh):
+    video_fpaths = glob(os.path.join(DATA_DIR, 'cam[1-9].mp4')) # original vids should be in the parent dir
+    out_dir = os.path.join(DATA_DIR, 'dlc')
+    app.create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
     
     
 # ========= MAIN ========
@@ -830,12 +985,25 @@ if __name__ == "__main__":
     ROOT_DATA_DIR = os.path.join("..", "data")
     DATA_DIR = os.path.join(ROOT_DATA_DIR, os.path.normpath(args.data_dir))
     
-    fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    print('========== DLC ==========\n')
+    dlc(DATA_DIR, args.dlc_thresh)
+    print('========== Triangulation ==========\n')
+    tri(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    plt.close('all')
+    print('========== SBA ==========\n')
     sba(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    plt.close('all')
+    print('========== EKF ==========\n')
+    ekf(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    plt.close('all')
+    print('========== FTE ==========\n')
+    fte(DATA_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    plt.close('all')
     
-    data_fpaths = [os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
+    print('Plotting results...')
+    data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+                   os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
                    os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
                    os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
-    app.plot_multiple_cheetah_reconstructions(data_fpaths, hide_lure=True, reprojections=False, dark_mode=True)
+    app.plot_multiple_cheetah_reconstructions(data_fpaths, reprojections=False, dark_mode=True)
     

@@ -10,8 +10,8 @@ def get_markers():
             'l_shoulder', 'l_front_knee', 'l_front_ankle', #'l_front_paw',
             'r_hip', 'r_back_knee', 'r_back_ankle', #'r_back_paw',
             'l_hip', 'l_back_knee', 'l_back_ankle', #'l_back_paw',
-            'lure'
-           ] # excludes paws for now!
+#             'lure'
+           ] # excludes paws & lure for now!
 
 
 def get_skeleton():
@@ -36,8 +36,8 @@ def get_pose_params():
               'theta_8', 'theta_9',        # r_shoulder, r_front_knee
               'theta_10', 'theta_11',      # l_hip, l_back_knee
               'theta_12', 'theta_13',      # r_hip, r_back_knee
-              'x_l', 'y_l', 'z_l'          # lure position in inertial
-             ] # exludes paws for now!
+#               'x_l', 'y_l', 'z_l'          # lure position in inertial
+             ] # exludes paws & lure for now!
     return dict(zip(states ,range(len(states))))
 
 
@@ -107,7 +107,7 @@ def get_3d_marker_coords(x):
     p_r_back_knee   = p_r_hip        + R12_I @ func([0, 0, -0.32])
     p_r_back_ankle  = p_r_back_knee  + R13_I @ func([0, 0, -0.25])
 
-    p_lure = func([x[idx['x_l']], x[idx['y_l']], x[idx['z_l']]])
+#     p_lure = func([x[idx['x_l']], x[idx['y_l']], x[idx['z_l']]])
 
     return func([p_l_eye.T, p_r_eye.T, p_nose.T,
                  p_neck_base.T, p_spine.T,
@@ -116,7 +116,7 @@ def get_3d_marker_coords(x):
                  p_r_shoulder.T, p_r_front_knee.T, p_r_front_ankle.T,
                  p_l_hip.T, p_l_back_knee.T, p_l_back_ankle.T,
                  p_r_hip.T, p_r_back_knee.T, p_r_back_ankle.T,
-                 p_lure.T
+#                  p_lure.T
                 ])
 
 

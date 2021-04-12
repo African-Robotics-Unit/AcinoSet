@@ -208,11 +208,13 @@ class Cheetah(Animation):
                       4,14,5,14,14,15,15,16,
                       4,17,5,17,17,18,18,19]
         
-        colours = [[self.dark_mode]*3+[1],
-                   [0,0.5,1,1],
-                   [1,0,1,1]]
+        colours = [[self.dark_mode]*3+[1], # white if dark_mode else black
+                   [1,0,1,1],              # fuchsia/magenta
+                   [0,1,0,1],              # green
+                   [0,0.8,0.8,1]]          # light blue
         
         self.n_reconstructions = len(multiple_reconstructions)
+        assert self.n_reconstructions < 5, 'Cannot plot more than 4 reconstructions at a time'
         self.n_frames = len(multiple_reconstructions[0])
         self.frame = 0
         
@@ -295,7 +297,7 @@ def plot_extrinsics(scene_fpath, pts_2d, fnames, triangulate_func, manual_points
     scene = Scene(scene_fpath, **kwargs)
 
     colors = [[1,0,0],                        # red: cam pair 0&1
-              [0,1,0],                        # greeen: cam pair 1&2
+              [0,1,0],                        # green: cam pair 1&2
               [kwargs.get('dark_mode', 0)]*3, # white if dark_mode else black: cam pair 2&3
               [0,0,1],                        # blue: cam pair 3&4
               [0,0.8,0.8],                    # light blue: cam pair 4&5
@@ -325,16 +327,17 @@ def plot_optimized_states(x, smoothed_x=None, mplstyle_fpath=None):
     if mplstyle_fpath is not None:
         plt.style.use(mplstyle_fpath)
 
-    titles = ['Lure positions', 'Head positions',
-             'Head angles', 'Neck angles',
-             'Front torso angle', 'Back torso angles',
-             'Tail base angles', 'Tail mid angles',
-             'Left shoulder angle', 'Left front knee angle',
-             'Right shoulder angles', 'Right front knee angle',
-             'Left hip angle', 'Left back knee angle',
-             'Right hip angle', 'Right back knee angle']
+    titles = [#'Lure positions',
+              'Head positions', 'Head angles', 'Neck angles',
+              'Front torso angle', 'Back torso angles',
+              'Tail base angles', 'Tail mid angles',
+              'Left shoulder angle', 'Left front knee angle',
+              'Right shoulder angles', 'Right front knee angle',
+              'Left hip angle', 'Left back knee angle',
+              'Right hip angle', 'Right back knee angle']
     
-    lbls = [['x_l', 'y_l', 'z_l'], ['x_0', 'y_0', 'z_0'],
+    lbls = [#['x_l', 'y_l', 'z_l'], # exclude lure for now
+            ['x_0', 'y_0', 'z_0'],
             ['phi_0', 'theta_0', 'psi_0'], ['phi_1', 'theta_1', 'psi_1'],
             ['theta_2'], ['phi_3', 'theta_3', 'psi_3'],
             ['theta_4', 'psi_4'], ['theta_5', 'psi_5'],

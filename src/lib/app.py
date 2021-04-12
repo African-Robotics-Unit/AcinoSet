@@ -1,4 +1,3 @@
-# clean imports after video writer funcs are cleaned and moved
 import os
 import sys
 import pickle
@@ -167,6 +166,18 @@ def plot_multiple_cheetah_reconstructions(data_fpaths, scene_fname=None, **kwarg
 
 
 # ==========  SAVE FUNCS  ==========
+# All these save functions are very similar... Generalise!!
+# Also use this instead: out_fpath = os.path.join(out_dir, f"{os.path.basename(out_dir)}.pickle")
+
+def save_tri(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=True):
+    out_fpath = os.path.join(out_dir, f"tri.pickle")
+    save_optimised_cheetah(positions, out_fpath, extra_data=dict(start_frame=start_frame))
+    save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
+    
+    if save_videos:
+        video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # original vids should be in the parent dir
+        create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
+        
 
 def save_sba(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=True):
     out_fpath = os.path.join(out_dir, f"sba.pickle")
@@ -237,7 +248,7 @@ def get_vid_info(path_dir, vid_extension='mp4'):
     return (vid.width(), vid.height()), vid.fps(), vid.frame_count(), vid.codec()
 
 
-def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputframerate=None, out_dir=None, draw_skeleton=False, pcutoff=0.5, dotsize=6, colormap='jet'):
+def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputframerate=None, out_dir=None, draw_skeleton=False, pcutoff=0.5, dotsize=6, colormap='jet', skeleton_color='white'):
     from functools import partial
     from multiprocessing import Pool
 
@@ -253,7 +264,7 @@ def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputfra
     if out_dir is None:
         out_dir = os.path.relpath(os.path.dirname(video_fpaths[0]), os.getcwd())
 
-    func = partial(proc_video, out_dir, bodyparts, codec, bodyparts2connect, outputframerate, draw_skeleton, pcutoff, dotsize, colormap)
+    func = partial(proc_video, out_dir, bodyparts, codec, bodyparts2connect, outputframerate, draw_skeleton, pcutoff, dotsize, colormap, skeleton_color)
 
     with Pool(min(os.cpu_count(), len(video_fpaths))) as pool:
         pool.map(func,video_fpaths)
