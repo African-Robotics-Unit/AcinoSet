@@ -327,16 +327,17 @@ def plot_optimized_states(x, smoothed_x=None, mplstyle_fpath=None):
     if mplstyle_fpath is not None:
         plt.style.use(mplstyle_fpath)
 
-    titles = ['Lure positions', 'Head positions',
-             'Head angles', 'Neck angles',
-             'Front torso angle', 'Back torso angles',
-             'Tail base angles', 'Tail mid angles',
-             'Left shoulder angle', 'Left front knee angle',
-             'Right shoulder angles', 'Right front knee angle',
-             'Left hip angle', 'Left back knee angle',
-             'Right hip angle', 'Right back knee angle']
+    titles = [#'Lure positions',
+              'Head positions', 'Head angles', 'Neck angles',
+              'Front torso angle', 'Back torso angles',
+              'Tail base angles', 'Tail mid angles',
+              'Left shoulder angle', 'Left front knee angle',
+              'Right shoulder angles', 'Right front knee angle',
+              'Left hip angle', 'Left back knee angle',
+              'Right hip angle', 'Right back knee angle']
     
-    lbls = [['x_l', 'y_l', 'z_l'], ['x_0', 'y_0', 'z_0'],
+    lbls = [#['x_l', 'y_l', 'z_l'], # exclude lure for now
+            ['x_0', 'y_0', 'z_0'],
             ['phi_0', 'theta_0', 'psi_0'], ['phi_1', 'theta_1', 'psi_1'],
             ['theta_2'], ['phi_3', 'theta_3', 'psi_3'],
             ['theta_4', 'psi_4'], ['theta_5', 'psi_5'],
