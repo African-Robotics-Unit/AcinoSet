@@ -1,6 +1,6 @@
 import json
-import numpy as np
 import cv2 as cv
+import numpy as np
 from typing import Tuple, Union
 from nptyping import Array
 from scipy.optimize import least_squares
