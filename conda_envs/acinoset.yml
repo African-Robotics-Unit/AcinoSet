@@ -1,25 +1,24 @@
 name: acinoset
 channels:
-  - conda-forge
   - defaults
+  - conda-forge
   - pytorch
 dependencies:
-  - python=3.7.9
   - pip
+  - tqdm
+  - ipopt # version 3.11.1 is required for windows!
   - numpy
-  - opencv
-  - nodejs
-  - jupyterlab
-  - nb_conda
-  - pandas
   - scipy
   - sympy
-  - matplotlib
-  - pyqtgraph
+  - opencv
+  - pandas
   - pyopengl
-  - ipopt
+  - jupyterlab
+  - matplotlib
+  - python=3.7.9
+  - pyqtgraph=0.11.0
   - pip:
-    - nptyping==0.3.1
     - pyomo
+    - pyqt5
     - tables
-    - PyQt5
+    - nptyping==0.3.1
