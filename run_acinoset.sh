@@ -6,9 +6,8 @@ IMAGE_NAME="denden047/acinoset"
 docker build -q -f "$CURRENT_PATH"/docker/Dockerfile.acinoset.cui -t ${IMAGE_NAME} . && \
 docker run -it --rm \
     -v "$CURRENT_PATH":/workdir \
-    -v /disk2/naoya/AcinoSet:/data \
+    -v /data/naoya/AcinoSet:/data \
     -w /workdir \
-    -p 6080:80 \
     ${IMAGE_NAME} \
     /bin/bash
     # /bin/bash -c " \
