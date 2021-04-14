@@ -34,7 +34,7 @@ def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len,
                 os.remove(f)
     save_points(out_fpath, saved_points, saved_fnames, board_shape, board_edge_len, cam_res)
 
-    
+
 # ==========  CALIBRATION  ==========
 
 def calibrate_standard_intrinsics(points_fpath, out_fpath):
@@ -64,7 +64,7 @@ def calibrate_fisheye_extrinsics_pairwise(camera_fpaths, points_fpaths, out_fpat
 
 
 # ==========  SBA  ==========
-    
+
 def sba_board_points_standard(scene_fpath, points_fpaths, out_fpath, manual_points_fpath=None, manual_points_only=False, camera_indices=None):
     triangulate_func = triangulate_points
     project_func = project_points
@@ -81,14 +81,14 @@ def sba_points_standard(scene_fpath, points_2d_df):
     triangulate_func = triangulate_points
     project_func = project_points
     return _sba_points(scene_fpath, points_2d_df, triangulate_func, project_func)
-    
+
 
 def sba_points_fisheye(scene_fpath, points_2d_df):
     triangulate_func = triangulate_points_fisheye
     project_func = project_points_fisheye
     return _sba_points(scene_fpath, points_2d_df, triangulate_func, project_func)
 
-    
+
 # ==========  PLOTTING  ==========
 
 def plot_corners(points_fpath):
@@ -110,8 +110,8 @@ def plot_points_fisheye_undistort(points_fpath, camera_fpath):
     undistort_pts = create_undistort_fisheye_point_function(k, d)
     undistorted_points = undistort_pts(points).reshape(points.shape)
     plot_calib_board(undistorted_points, board_shape, cam_res)
-    
-    
+
+
 def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
     *_, scene_fpath = find_scene_file(data_dir, scene_fname, verbose=False)
     points_dir = os.path.join(os.path.dirname(scene_fpath), "points")
@@ -129,29 +129,29 @@ def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
             frames.append(img_names)
 
     plot_extrinsics(scene_fpath, pts_2d, frames, triangulate_points_fisheye, manual_points_only, **kwargs)
-    
-    
+
+
 def plot_cheetah_states(states, smoothed_states=None, out_fpath=None, mplstyle_fpath=None):
     fig, axs = plot_optimized_states(states, smoothed_states, mplstyle_fpath)
     if out_fpath is not None:
         fig.savefig(out_fpath, transparent=True)
         print(f'Saved {out_fpath}\n')
 
-        
+
 def _plot_cheetah_reconstruction(positions, data_dir, scene_fname=None, labels=None, **kwargs):
     positions = np.array(positions)
     *_, scene_fpath = find_scene_file(data_dir, scene_fname, verbose=False)
     ca = Cheetah(positions, scene_fpath, labels, project_points_fisheye, **kwargs)
     ca.animation()
-    
-    
+
+
 def plot_cheetah_reconstruction(data_fpath, scene_fname=None, **kwargs):
     label = os.path.basename(os.path.splitext(data_fpath)[0]).upper()
     with open(data_fpath, 'rb') as f:
         data = pickle.load(f)
     positions = data["smoothed_positions"] if 'EKF' in label else data["positions"]
     _plot_cheetah_reconstruction([positions], os.path.dirname(data_fpath), scene_fname, labels=[label], **kwargs)
-    
+
 
 def plot_multiple_cheetah_reconstructions(data_fpaths, scene_fname=None, **kwargs):
     positions = []
@@ -173,17 +173,17 @@ def save_tri(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_vide
     out_fpath = os.path.join(out_dir, f"tri.pickle")
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(start_frame=start_frame))
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
-    
+
     if save_videos:
         video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
-        
+
 
 def save_sba(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=True):
     out_fpath = os.path.join(out_dir, f"sba.pickle")
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(start_frame=start_frame))
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
-    
+
     if save_videos:
         video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
@@ -196,7 +196,7 @@ def save_ekf(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=
     out_fpath = os.path.join(out_dir, f"ekf.pickle")
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(smoothed_positions=smoothed_positions, **states, start_frame=start_frame))
     save_3d_cheetah_as_2d(smoothed_positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
-    
+
     if save_videos:
         video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
@@ -207,19 +207,19 @@ def save_fte(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=
     out_fpath = os.path.join(out_dir, f"fte.pickle")
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(**states, start_frame=start_frame))
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
-    
+
     if save_videos:
         video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
 
-        
+
 # ==========  STDOUT LOGGING  ==========
 
 def start_logging(out_fpath):
     """Start logger, appending print output to given output file"""
     sys.stdout = Logger(out_fpath)
 
-    
+
 def stop_logging():
     """Stop logging and return print functionality to normal"""
     sys.stdout.logfile.close()
@@ -230,11 +230,11 @@ def stop_logging():
 
 def get_vid_info(path_dir, vid_extension='mp4'):
     """Finds a video specified in/by the path variable and returns its info
-    
+
     :param path: Either a directory containing a video or the path to a specific video file
     """
     from errno import ENOENT
-    
+
     orig_path = path_dir
     if not os.path.isfile(path_dir):
         files = sorted(glob(os.path.join(path_dir, f"*.{vid_extension}"))) # assume path is a dir that holds video file(s)
@@ -242,7 +242,7 @@ def get_vid_info(path_dir, vid_extension='mp4'):
             path_dir = files[0]
         else:
             raise FileNotFoundError(ENOENT, os.strerror(ENOENT), orig_path) # assume videos didn't open due to incorrect path
-        
+
     vid = VideoProcessorCV(in_name=path_dir)
     vid.close()
     return (vid.width(), vid.height()), vid.fps(), vid.frame_count(), vid.codec()
@@ -253,7 +253,7 @@ def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputfra
     from multiprocessing import Pool
 
     print('Saving labeled videos...')
-    
+
     bodyparts = get_markers()
     bodyparts2connect = get_skeleton() if draw_skeleton else None
 
@@ -268,5 +268,5 @@ def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputfra
 
     with Pool(min(os.cpu_count(), len(video_fpaths))) as pool:
         pool.map(func,video_fpaths)
-        
+
     print('Done!\n')

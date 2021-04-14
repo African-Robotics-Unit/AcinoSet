@@ -526,7 +526,6 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
     app.stop_logging()
 
     # ===== SAVE FTE RESULTS =====
-
     def convert_m(m, pose_indices):
         x_optimised, dx_optimised, ddx_optimised = [], [], []
         for n in m.N:
@@ -564,6 +563,14 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
     app.plot_cheetah_states(states['x'], out_fpath=fig_fpath)
+
+    # x, dx, ddx =  [], [], []
+    # for n in m.N:
+    #     x.append([value(m.x[n, p]) for p in m.P])
+    #     dx.append([value(m.dx[n, p]) for p in m.P])
+    #     ddx.append([value(m.ddx[n, p]) for p in m.P])
+
+    # app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
 
 def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
