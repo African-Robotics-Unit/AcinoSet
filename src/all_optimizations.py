@@ -19,7 +19,7 @@ from lib.calib import triangulate_points_fisheye, project_points_fisheye
 plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 
 
-def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
+def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
     # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
     # we use a redescending cost to stop outliers affecting the optimisation negatively
     redesc_a = 3
@@ -38,7 +38,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
     ax = plt.gca()
     ax.set_ylim((-5, 50))
     ax.legend()
-    if show_plot:
+    if plot:
         plt.show(block=True)
 
     t0 = time()
@@ -526,6 +526,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
     app.stop_logging()
 
     # ===== SAVE FTE RESULTS =====
+
     def convert_m(m, pose_indices):
         x_optimised, dx_optimised, ddx_optimised = [], [], []
         for n in m.N:
@@ -563,14 +564,6 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
     app.plot_cheetah_states(states['x'], out_fpath=fig_fpath)
-
-    # x, dx, ddx =  [], [], []
-    # for n in m.N:
-    #     x.append([value(m.x[n, p]) for p in m.P])
-    #     dx.append([value(m.dx[n, p]) for p in m.P])
-    #     ddx.append([value(m.ddx[n, p]) for p in m.P])
-
-    # app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
 
 def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
@@ -888,7 +881,7 @@ def sba(DATA_DIR: str, DLC_DIR: str, scene_fpath: str, num_frame: int, dlc_thres
     fig_fpath = os.path.join(OUT_DIR, 'sba.pdf')
     plt.savefig(fig_fpath, transparent=True)
     print(f'Saved {fig_fpath}\n')
-    if debug_plot:
+    if plot:
         plt.show(block=True)
 
     # ========= SAVE SBA RESULTS ========
@@ -983,11 +976,8 @@ if __name__ == "__main__":
     plt.close('all')
 
     print('Plotting results...')
-    if args.plot:
-        data_fpaths = [
-            os.path.join(DATA_DIR, 'tri', 'tri.pickle'),    # plot is too busy when tri is included
-            os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
-            os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
-            os.path.join(DATA_DIR, 'fte', 'fte.pickle')
-        ]
-        app.plot_multiple_cheetah_reconstructions(data_fpaths, reprojections=False, dark_mode=True)
+    data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+                   os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
+                   os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
+                   os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
+    app.plot_multiple_cheetah_reconstructions(data_fpaths, reprojections=False, dark_mode=True)

@@ -21,8 +21,5 @@ dependencies:
     - pyomo
     - pyqt5
     - tables
-<<<<<<< Updated upstream
     - nptyping==0.3.1
-=======
     - tqdm
->>>>>>> Stashed changes

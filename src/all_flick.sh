@@ -9,7 +9,7 @@ python all_optimizations.py --data_dir /data/2019_03_09/jules/flick1
 python all_optimizations.py --data_dir /data/2019_03_09/jules/flick2
 python all_optimizations.py --data_dir /data/2019_03_03/menya/flick
 python all_optimizations.py --data_dir /data/2019_03_03/phantom/flick
-python all_optimizations.py --data_dir /data/2019_02_27/Kiara/flick
+python all_optimizations.py --data_dir /data/2019_02_27/kiara/flick
 python all_optimizations.py --data_dir /data/2019_02_27/romeo/flick
 python all_optimizations.py --data_dir /data/2017_08_29/bottom/phantom/flick2
 python all_optimizations.py --data_dir /data/2017_08_29/bottom/zorro/flick2

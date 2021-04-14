@@ -146,7 +146,7 @@ def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res):
 
 def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=True, save_as_csv=True):
     file_data = dict(positions=positions)
-    
+
     if extra_data is not None:
         assert type(extra_data) is dict
         file_data.update(extra_data)
@@ -154,19 +154,19 @@ def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=Tru
     with open(out_fpath, 'wb') as f:
             pickle.dump(file_data, f)
     print('Saved', out_fpath)
-    
+
     if for_matlab:
         out_fpath = os.path.splitext(out_fpath)[0] + '.mat'
         savemat(out_fpath, file_data)
         print('Saved', out_fpath)
-        
+
     if save_as_csv:
         # to-do??
         # should use a similar method as save_3d_cheetah_as 3d, along the lines of:
-        
+
 #         xyz_labels = ['x', 'y', 'z']
 #         pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
-        
+
 #         for i in range(len(video_fpaths)):
 #             cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
 #             fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
@@ -175,7 +175,7 @@ def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=Tru
 #             df.to_csv(os.path.splitext(fpath)[0] + ".csv")
         pass
 
-            
+
 def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project_func, start_frame, save_as_csv=True, out_fname=None):
     assert os.path.dirname(os.path.dirname(scene_fpath)) in out_dir, 'scene_fpath does not belong to the same parent folder as out_dir'
 
@@ -270,7 +270,7 @@ def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, tri
             df_pairs = pd.concat([df_pairs, intersection_df], ignore_index=True, join='outer', sort=False)
         else:
             print(f"No pairwise points between camera {cam_a} and {cam_b}")
-    
+
     print()
     points_3d_df = df_pairs[['frame', 'marker', 'x','y','z']].groupby(['frame','marker']).mean().reset_index()
     return points_3d_df
