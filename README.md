@@ -15,10 +15,10 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 ## 2D --> 3D Data Pipeline:
 
 ### What we provide: 
-- 7,588 [ground truth 2D frames](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AACvUBuloEvAUFJFYZ9IqtbLa/data/hand_labeled_data?dl=0&subfolder_nav_tracking=1)
-- 119,490 processed frames with 2D keypoint estimation outputs [(H5 files as in the DLC format, and raw video)](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1) 
+- 7,588 [ground truth 2D frames](https://www.dropbox.com/sh/z3uv6pnk7paygph/AAAiJOavquW89uPlz_Jzjtfua?dl=0)
+- 119,490 processed frames with 2D keypoint estimation outputs [(H5 files as in the DLC format, and raw video)](https://www.dropbox.com/sh/kp5kmatbv5cdjx2/AABfJGb7ktVK_L0lybOLQIbJa?dl=0) 
     - this is currently organized by date > animal ID > "run/attempt"
-- [3D files that are processed using our FTE baseline model](https://www.dropbox.com/sh/9y3rb9m5n3sbhwh/AABnfdKGHb0GrfHT7ynqf1APa/data?dl=0&subfolder_nav_tracking=1). These can be used for 3D GT.
+- [3D files that are processed using our FTE baseline model](https://www.dropbox.com/sh/kp5kmatbv5cdjx2/AABfJGb7ktVK_L0lybOLQIbJa?dl=0). These can be used for 3D GT.
    - these files are called `fte.pickle`, have a related `(n)_cam_scene_sba.json` file, and can be loaded in the GUI.
 - A GUI to inspect the 3D dataset, which can be found [here](https://github.com/African-Robotics-Unit/acinoset_viewer)
 
@@ -27,8 +27,8 @@ The following sections document how this was created by the code within this rep
 
 #### Pre-trained DeepLabCut Model:
 
-- You can use the `full_cheetah` model provided in the [DLC Model Zoo](http://modelzoo.deeplabcut.org)  To re-create the H5 files (or on new videos). 
-- Here, we also already provide the videos and H5 outputs of all frames, [here]().
+- You can use the `full_cheetah` model provided in the [DLC Model Zoo](http://modelzoo.deeplabcut.org) to re-create the existing H5 files (or on new videos). 
+- Here, we also already provide the videos and H5 outputs of all frames, [here](https://www.dropbox.com/sh/kp5kmatbv5cdjx2/AABfJGb7ktVK_L0lybOLQIbJa?dl=0).
 
 ### Labelling Cheetah Body Positions:
 
@@ -37,7 +37,7 @@ If you want to label more cheetah data, you can also do so within the [DeepLabCu
 $ conda env create -f conda_envs/DLC.yml -n DLC
 ```
 
-### Camera Calibration and 3D Reconstruction:
+### AcinoSet Setup:
 
 Navigate to the AcinoSet folder and build the environment:
 ```sh
@@ -48,6 +48,8 @@ Launch Jupyter Lab:
 ```sh
 $ jupyter lab
 ```
+
+### Camera Calibration and 3D Reconstruction:
 
 #### Intrinsic & Extrinsic Calibration:
 
@@ -82,6 +84,11 @@ $ python argus_converter.py \
     --data_dir ../data/2019_03_07/extrinsic_calib/argus_folder
 ```
 
-#### Full Trajectory Estimation:
+### Trajectory Optimisation:
 
-Open `FTE.ipynb` and follow the instructions!
+You can run all types of optimisations in one go:
+```sh
+python all_optimizations.py --data_dir 2019_03_09/lily/run --start_frame 70 --end_frame 170 --dlc_thresh 0.5
+```
+
+Otherwise, you can run each optimisation seperately. For example, simply open `FTE.ipynb` and follow the instructions!
