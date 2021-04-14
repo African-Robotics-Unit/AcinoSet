@@ -122,7 +122,7 @@ def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
         pts_2d = pts_2d.swapaxes(0, 1)
         frames = [frames]*len(pts_2d)
     else:
-        points_fpaths = glob(os.path.join(points_dir, 'points[1-9].json'))
+        points_fpaths = sorted(glob(os.path.join(points_dir, 'points[1-9].json')))
         for fpath in points_fpaths:
             img_pts, img_names, *_ = load_points(fpath)
             pts_2d.append(img_pts)
@@ -175,7 +175,7 @@ def save_tri(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_vide
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
     
     if save_videos:
-        video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # original vids should be in the parent dir
+        video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
         
 
@@ -185,7 +185,7 @@ def save_sba(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_vide
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
     
     if save_videos:
-        video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # original vids should be in the parent dir
+        video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
 
 
@@ -198,7 +198,7 @@ def save_ekf(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=
     save_3d_cheetah_as_2d(smoothed_positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
     
     if save_videos:
-        video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # original vids should be in the parent dir
+        video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
 
 def save_fte(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=True):
@@ -209,7 +209,7 @@ def save_fte(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
     
     if save_videos:
-        video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # original vids should be in the parent dir
+        video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # original vids should be in the parent dir
         create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
 
         
@@ -237,7 +237,7 @@ def get_vid_info(path_dir, vid_extension='mp4'):
     
     orig_path = path_dir
     if not os.path.isfile(path_dir):
-        files = glob(os.path.join(path_dir, f"*.{vid_extension}")) # assume path is a dir that holds video file(s)
+        files = sorted(glob(os.path.join(path_dir, f"*.{vid_extension}"))) # assume path is a dir that holds video file(s)
         if files:
             path_dir = files[0]
         else:

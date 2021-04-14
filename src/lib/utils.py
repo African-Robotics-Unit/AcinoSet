@@ -1,6 +1,6 @@
 import os
-import pickle
 import json
+import pickle
 import numpy as np
 import pandas as pd
 from glob import glob
@@ -179,9 +179,9 @@ def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=Tru
 def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project_func, start_frame, save_as_csv=True, out_fname=None):
     assert os.path.dirname(os.path.dirname(scene_fpath)) in out_dir, 'scene_fpath does not belong to the same parent folder as out_dir'
 
-    video_fpaths = glob(os.path.join(out_dir, 'cam[1-9].mp4')) # check current dir for videos
+    video_fpaths = sorted(glob(os.path.join(out_dir, 'cam[1-9].mp4'))) # check current dir for videos
     if not video_fpaths:
-        video_fpaths = glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4')) # check parent dir for videos
+        video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # check parent dir for videos
 
     if video_fpaths:
         k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_fpath, verbose=False)
@@ -229,7 +229,7 @@ def find_scene_file(dir_path, scene_fname=None, verbose=True):
     if dir_path and dir_path != os.path.join('..', 'data'):
         scene_fpath = os.path.join(dir_path, 'extrinsic_calib', scene_fname)
         # ignore [1-9]_cam_scene_before_corrections.json unless specified
-        scene_files = [scene_file for scene_file in glob(scene_fpath) if ('before_corrections' not in scene_file) or (scene_file == scene_fpath)]
+        scene_files = sorted([scene_file for scene_file in glob(scene_fpath) if ('before_corrections' not in scene_file) or (scene_file == scene_fpath)])
 
         if scene_files:
             k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_files[-1], verbose)
@@ -274,4 +274,3 @@ def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, tri
     print()
     points_3d_df = df_pairs[['frame', 'marker', 'x','y','z']].groupby(['frame','marker']).mean().reset_index()
     return points_3d_df
-

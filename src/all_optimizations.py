@@ -256,7 +256,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
     #===================================================
     print("Loading data")
 
-    df_paths = glob(os.path.join(DLC_DIR, '*.h5'))
+    df_paths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
 
     points_2d_df = utils.load_dlc_points_as_df(df_paths, verbose=False)
     points_3d_df = utils.get_pairwise_3d_points_from_df(
@@ -559,7 +559,7 @@ def fte(DATA_DIR, start_frame, end_frame, dlc_thresh, show_plot: bool = False):
     app.save_optimised_cheetah(positions, out_fpath, extra_data=dict(**states, start_frame=start_frame))
     app.save_3d_cheetah_as_2d(positions, OUT_DIR, scene_fpath, markers, project_points_fisheye, start_frame)
 
-    video_fpaths = glob(os.path.join(os.path.dirname(OUT_DIR), 'cam[1-9].mp4')) # original vids should be in the parent dir
+    video_fpaths = sorted(glob(os.path.join(os.path.dirname(OUT_DIR), 'cam[1-9].mp4'))) # original vids should be in the parent dir
     app.create_labeled_videos(video_fpaths, out_dir=OUT_DIR, draw_skeleton=True, pcutoff=dlc_thresh)
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
@@ -652,7 +652,7 @@ def ekf(DATA_DIR, start_frame, end_frame, dlc_thresh):
     # ========= LOAD DLC DATA ========
 
     # Load DLC 2D point files (.h5 outputs)
-    dlc_2d_point_files = glob(os.path.join(DLC_DIR, '*.h5'))
+    dlc_2d_point_files = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
     assert(len(dlc_2d_point_files) == n_cams), f"# of dlc '.h5' files != # of cams in {n_cams}_cam_scene_sba.json"
 
     # Load Measurement Data (pixels, likelihood)
@@ -910,7 +910,7 @@ def tri(DATA_DIR: str, DLC_DIR: str, start_frame: int, end_frame: int, dlc_thres
 
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
-    dlc_points_fpaths = glob(os.path.join(DLC_DIR, '*.h5'))
+    dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
     assert n_cams == len(dlc_points_fpaths)
 
     # Load Measurement Data (pixels, likelihood)
@@ -940,7 +940,7 @@ def tri(DATA_DIR: str, DLC_DIR: str, start_frame: int, end_frame: int, dlc_thres
 
 
 def dlc(DATA_DIR, dlc_thresh):
-    video_fpaths = glob(os.path.join(DATA_DIR, 'cam[1-9].mp4')) # original vids should be in the parent dir
+    video_fpaths = sorted(glob(os.path.join(DATA_DIR, 'cam[1-9].mp4'))) # original vids should be in the parent dir
     out_dir = os.path.join(DATA_DIR, 'dlc')
     app.create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
 

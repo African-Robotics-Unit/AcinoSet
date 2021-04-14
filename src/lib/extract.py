@@ -1,8 +1,9 @@
-import cv2
-import numpy as np
 import os
-import colorsys
+import cv2
 import json
+import colorsys
+import numpy as np
+
 
 def draw_text(img, text, move_text_lower_pixels=0, fontColor = [255]*3):
     fontScale = img.shape[0]/750
@@ -19,6 +20,7 @@ def draw_text(img, text, move_text_lower_pixels=0, fontColor = [255]*3):
                 fontColor,
                 lineType)
 
+    
 def get_frames(vid_fpath, frame_output_dir):
     cap = cv2.VideoCapture(vid_fpath)
     if cap.isOpened():
