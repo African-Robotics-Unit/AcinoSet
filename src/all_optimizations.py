@@ -878,7 +878,7 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
     *_, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
-    dlc_points_fpaths = glob(os.path.join(DLC_DIR, '*.h5'))
+    dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
     assert n_cams == len(dlc_points_fpaths)
 
     # Load Measurement Data (pixels, likelihood)
@@ -986,12 +986,12 @@ if __name__ == "__main__":
 
     print('========== DLC ==========\n')
     dlc(DATA_DIR, args.dlc_thresh)
-    print('========== Triangulation ==========\n')
-    tri(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
-    plt.close('all')
-    # print('========== SBA ==========\n')
-    # sba(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    # print('========== Triangulation ==========\n')
+    # tri(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
     # plt.close('all')
+    print('========== SBA ==========\n')
+    sba(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    plt.close('all')
     # print('========== EKF ==========\n')
     # ekf(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
     # plt.close('all')
