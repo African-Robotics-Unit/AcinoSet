@@ -10,8 +10,3 @@ docker run -it --rm \
     -w /workdir \
     ${IMAGE_NAME} \
     /bin/bash
-    # /bin/bash -c " \
-    #     conda init bash && \
-    #     conda activate acinoset && \
-    #     jupyter lab --allow-root --NotebookApp.token='' --ip=* --no-browser \
-    # "
