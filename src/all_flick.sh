@@ -1,5 +1,4 @@
 #!/bin/bash
-python all_optimizations.py --data_dir /data/2019_02_27/kiara/flick
 
 python all_optimizations.py --data_dir /data/2019_03_07/phantom/flick
 python all_optimizations.py --data_dir /data/2019_03_07/menya/flick
