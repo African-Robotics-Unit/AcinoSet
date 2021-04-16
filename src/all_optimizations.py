@@ -860,45 +860,56 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
 
 
-def sba(DATA_DIR: str, DLC_DIR: str, scene_fpath: str, num_frame: int, dlc_thresh: float, plot: bool = False):
-    # init
+def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
+    t0 = time()
+
     OUT_DIR = os.path.join(DATA_DIR, 'sba')
     os.makedirs(OUT_DIR, exist_ok=True)
+
     app.start_logging(os.path.join(OUT_DIR, 'sba.log'))
-    N = end_frame - start_frame
 
-    k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
+    # load video info
+    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
+    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
-    dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
+    start_frame -= 1    # 0 based indexing
+    assert start_frame >= 0
+    N = end_frame-start_frame
+
+    *_, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
+
+    dlc_points_fpaths = glob(os.path.join(DLC_DIR, '*.h5'))
     assert n_cams == len(dlc_points_fpaths)
 
     # Load Measurement Data (pixels, likelihood)
     points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
     points_2d_df = points_2d_df[points_2d_df["frame"].between(start_frame, end_frame-1)]
-    points_2d_df = points_2d_df[points_2d_df['likelihood'] > dlc_thresh] # ignore points with low likelihood
+    points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
 
-    assert len(k_arr) == points_2d_df['camera'].nunique()
+    t1 = time()
+    print("Initialization took {0:.2f} seconds\n".format(t1 - t0))
 
     points_3d_df, residuals = app.sba_points_fisheye(scene_fpath, points_2d_df)
 
     app.stop_logging()
 
-    plt.plot(residuals['before'], alpha=0.5, label="Cost before")
-    plt.plot(residuals['after'], alpha=0.5, label="Cost after")
+    plt.plot(residuals['before'], label="Cost before")
+    plt.plot(residuals['after'], label="Cost after")
     plt.legend()
-    fig_fpath = os.path.join(OUT_DIR, 'sba.pdf')
+    fig_fpath = os.path.join(OUT_DIR, 'sba.svg')
     plt.savefig(fig_fpath, transparent=True)
     print(f'Saved {fig_fpath}\n')
-    if plot:
-        plt.show(block=True)
+    plt.show(block=False)
 
     # ========= SAVE SBA RESULTS ========
+
     markers = misc.get_markers()
-    positions = np.full((num_frame, len(markers), 3), np.nan)
+
+    positions = np.full((N, len(markers), 3), np.nan)
     for i, marker in enumerate(markers):
         marker_pts = points_3d_df[points_3d_df["marker"]==marker][["frame", "x", "y", "z"]].values
         for frame, *pt_3d in marker_pts:
-            positions[int(frame) - start_frame, i] = pt_3d
+            positions[int(frame)-start_frame, i] = pt_3d
 
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
@@ -913,7 +924,7 @@ def tri(DATA_DIR, DLC_DIR, start_frame: int, end_frame: int, dlc_thresh):
 
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
-    dlc_points_fpaths = glob(os.path.join(DLC_DIR, '*.h5'))
+    dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
     assert n_cams == len(dlc_points_fpaths)
 
     # Load Measurement Data (pixels, likelihood)
@@ -925,7 +936,7 @@ def tri(DATA_DIR, DLC_DIR, start_frame: int, end_frame: int, dlc_thresh):
 
     points_3d_df = utils.get_pairwise_3d_points_from_df(
         points_2d_df,
-        k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
+        k_arr, d_arr.reshape((-1, 4)), r_arr, t_arr,
         triangulate_points_fisheye
     )
 
@@ -970,28 +981,30 @@ if __name__ == "__main__":
 
     # load DLC info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
+    assert args.end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
     end_frame = tot_frames if args.end_frame == -1 else args.end_frame
-    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
 
     print('========== DLC ==========\n')
     dlc(DATA_DIR, args.dlc_thresh)
-    # print('========== Triangulation ==========\n')
-    # tri(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
-    # plt.close('all')
-    print('========== SBA ==========\n')
-    sba(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    print('========== Triangulation ==========\n')
+    tri(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
     plt.close('all')
+    # print('========== SBA ==========\n')
+    # sba(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    # plt.close('all')
     # print('========== EKF ==========\n')
     # ekf(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
     # plt.close('all')
     # print('========== FTE ==========\n')
     # fte(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
-    plt.close('all')
+    # plt.close('all')
 
     if args.plot:
         print('Plotting results...')
-        data_fpaths = [#os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
-                    os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
-                    os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
-                    os.path.join(DATA_DIR, 'fte', 'fte.pickle')]
+        data_fpaths = [
+            os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+            os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
+            os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
+            os.path.join(DATA_DIR, 'fte', 'fte.pickle')
+        ]
         app.plot_multiple_cheetah_reconstructions(data_fpaths, reprojections=False, dark_mode=True)
