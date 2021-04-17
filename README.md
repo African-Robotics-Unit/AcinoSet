@@ -12,9 +12,8 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 
 - Python3, anaconda, code dependencies are within conda env files.
 
-## 2D --> 3D Data Pipeline:
+## What we provide: 
 
-### What we provide: 
 - 7,588 [ground truth 2D frames](https://www.dropbox.com/sh/z3uv6pnk7paygph/AAAiJOavquW89uPlz_Jzjtfua?dl=0)
 - 119,490 processed frames with 2D keypoint estimation outputs [(H5 files as in the DLC format, and raw video)](https://www.dropbox.com/sh/kp5kmatbv5cdjx2/AABfJGb7ktVK_L0lybOLQIbJa?dl=0) 
     - this is currently organized by date > animal ID > "run/attempt"
@@ -25,7 +24,7 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
 
 The following sections document how this was created by the code within this repo:
 
-#### Pre-trained DeepLabCut Model:
+### Pre-trained DeepLabCut Model:
 
 - You can use the `full_cheetah` model provided in the [DLC Model Zoo](http://modelzoo.deeplabcut.org) to re-create the existing H5 files (or on new videos). 
 - Here, we also already provide the videos and H5 outputs of all frames, [here](https://www.dropbox.com/sh/kp5kmatbv5cdjx2/AABfJGb7ktVK_L0lybOLQIbJa?dl=0).
@@ -37,7 +36,7 @@ If you want to label more cheetah data, you can also do so within the [DeepLabCu
 $ conda env create -f conda_envs/DLC.yml -n DLC
 ```
 
-### AcinoSet Setup:
+## AcinoSet Setup:
 
 Navigate to the AcinoSet folder and build the environment:
 ```sh
@@ -49,15 +48,15 @@ Launch Jupyter Lab:
 $ jupyter lab
 ```
 
-### Camera Calibration and 3D Reconstruction:
+## Camera Calibration and 3D Reconstruction:
 
-#### Intrinsic & Extrinsic Calibration:
+### Intrinsic & Extrinsic Calibration:
 
-Run `calib_with_gui.ipynb`, and follow the instructions.
+Run `calib_with_gui.ipynb` and follow the instructions.
 
 Alternatively, if the checkerboard points detected in `calib_with_gui.ipynb` are unsatisfactory, open `saveMatlabPointsForAcinoSet.m` in MATLAB and follow the instructions. Note that this requires MATLAB 2020b or later.
 
-##### Optionally: Manually Defining the Shared Points for extrinsic calibration:
+#### Optionally: Manually Defining the Shared Points for extrinsic calibration:
 
 You can manually define points on each video in a scene with [Argus](http://argus.web.unc.edu/) Clicker. A quick tutorial is found [here](http://argus.web.unc.edu/tutorial/#Clicker).
 
@@ -84,18 +83,18 @@ $ python argus_converter.py \
     --data_dir ../data/2019_03_07/extrinsic_calib/argus_folder
 ```
 
-### Trajectory Refinement:
+### 3D Reconstruction:
 
-On top of standard triangulation (TRI), we offer three different trajectory refinement options:
+To reconstruct a cheetah into 3D, we offer three different trajectory refinement options on top of standard triangulation (TRI):
 
 -  Sparse Bundle Adjustment (SBA)
 -  Extended Kalman Filter (EKF)
 -  Full Trajectory Estimation (FTE)
 
-You can run each refinement seperately. For example, simply open `FTE.ipynb` and follow the instructions!
+You can run each refinement option seperately. For example, simply open `FTE.ipynb` and follow the instructions!
 Otherwise, you can run all types of refinements in one go:
 ```sh
 python all_optimizations.py --data_dir 2019_03_09/lily/run --start_frame 70 --end_frame 170 --dlc_thresh 0.5
 ```
 
-**NB**: When running the FTE, we recommend you use the MA86 solver. For details on how to set this up, please see [this](https://github.com/African-Robotics-Unit/docs/blob/main/linear-solvers.md).
+**NB**: When running the FTE, we recommend that you use the MA86 solver. For details on how to set this up, see [these instructions](https://github.com/African-Robotics-Unit/docs/blob/main/linear-solvers.md).
