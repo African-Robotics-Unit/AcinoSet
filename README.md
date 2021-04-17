@@ -84,11 +84,18 @@ $ python argus_converter.py \
     --data_dir ../data/2019_03_07/extrinsic_calib/argus_folder
 ```
 
-### Trajectory Optimisation:
+### Trajectory Refinement:
 
-You can run all types of optimisations in one go:
+On top of standard triangulation (TRI), we offer three different trajectory refinement options:
+
+-  Sparse Bundle Adjustment (SBA)
+-  Extended Kalman Filter (EKF)
+-  Full Trajectory Estimation (FTE)
+
+You can run each refinement seperately. For example, simply open `FTE.ipynb` and follow the instructions!
+Otherwise, you can run all types of refinements in one go:
 ```sh
 python all_optimizations.py --data_dir 2019_03_09/lily/run --start_frame 70 --end_frame 170 --dlc_thresh 0.5
 ```
 
-Otherwise, you can run each optimisation seperately. For example, simply open `FTE.ipynb` and follow the instructions!
+**NB**: When running the FTE, we recommend you use the MA86 solver. For details on how to set this up, please see [this](https://github.com/African-Robotics-Unit/docs/blob/main/linear-solvers.md).
