@@ -6,11 +6,12 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
  AcinoSet is a dataset of free-running cheetahs in the wild that contains 119,490 frames of multi-view synchronized high-speed video footage, camera calibration files and 7,588 human-annotated frames. We utilize markerless animal pose estimation with DeepLabCut to provide 2D keypoints (in the 119K frames). Then, we use three methods that serve as strong baselines for 3D pose estimation tool development: traditional sparse bundle adjustment, an Extended Kalman Filter, and a trajectory optimization-based method we call Full Trajectory Estimation. The resulting 3D trajectories, human-checked 3D ground truth, and an interactive tool to inspect the data is also provided. We believe this dataset will be useful for a diverse range of fields such as ecology, robotics, biomechanics, as well as computer vision.
 
 ### AcinoSet code by:
-- [Liam Clark](https://github.com/LiamClarkZA) | [Ricky Jericevich](https://github.com/@rickyjericevich) | [Daniel Joska](https://github.com/DJoska) | [Naoya Muramatsu](https://github.com/DenDen047)
+- [Liam Clark](https://github.com/LiamClarkZA) | [Ricardo Jericevich](https://github.com/@rickyjericevich) | [Daniel Joska](https://github.com/DJoska) | [Naoya Muramatsu](https://github.com/DenDen047)
 
 ## Prerequisites
 
-- Python3, anaconda, code dependencies are within conda env files.
+- Anaconda
+- The dependecies defined in conda_envs/*.yml
 
 ## What we provide: 
 
@@ -50,13 +51,13 @@ $ jupyter lab
 
 ## Camera Calibration and 3D Reconstruction:
 
-### Intrinsic & Extrinsic Calibration:
+### Intrinsic and Extrinsic Calibration:
 
-Run `calib_with_gui.ipynb` and follow the instructions.
+Open `calib_with_gui.ipynb` and follow the instructions.
 
 Alternatively, if the checkerboard points detected in `calib_with_gui.ipynb` are unsatisfactory, open `saveMatlabPointsForAcinoSet.m` in MATLAB and follow the instructions. Note that this requires MATLAB 2020b or later.
 
-#### Optionally: Manually Defining the Shared Points for extrinsic calibration:
+#### Optionally: Manually defining the shared points for extrinsic calibration:
 
 You can manually define points on each video in a scene with [Argus](http://argus.web.unc.edu/) Clicker. A quick tutorial is found [here](http://argus.web.unc.edu/tutorial/#Clicker).
 
@@ -85,13 +86,13 @@ $ python argus_converter.py \
 
 ### 3D Reconstruction:
 
-To reconstruct a cheetah into 3D, we offer three different trajectory refinement options on top of standard triangulation (TRI):
+To reconstruct a cheetah into 3D, we offer three different pose estimation options on top of standard triangulation (TRI):
 
 -  Sparse Bundle Adjustment (SBA)
 -  Extended Kalman Filter (EKF)
 -  Full Trajectory Estimation (FTE)
 
-You can run each refinement option seperately. For example, simply open `FTE.ipynb` and follow the instructions!
+You can run each option seperately. For example, simply open `FTE.ipynb` and follow the instructions!
 Otherwise, you can run all types of refinements in one go:
 ```sh
 python all_optimizations.py --data_dir 2019_03_09/lily/run --start_frame 70 --end_frame 170 --dlc_thresh 0.5
