@@ -144,7 +144,7 @@ def save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res):
     print(f'Saved extrinsics to {out_fpath}\n')
 
 
-def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=True, save_as_csv=True):
+def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=False, save_as_csv=False):
     file_data = dict(positions=positions)
 
     if extra_data is not None:
@@ -163,16 +163,15 @@ def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=Tru
     if save_as_csv:
         # to-do??
         # should use a similar method as save_3d_cheetah_as 3d, along the lines of:
+        # xyz_labels = ['x', 'y', 'z']
+        # pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
 
-#         xyz_labels = ['x', 'y', 'z']
-#         pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
+        # for i in range(len(video_fpaths)):
+        #     cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
+        #     fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
 
-#         for i in range(len(video_fpaths)):
-#             cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
-#             fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
-
-#             df = pd.DataFrame(data.reshape((n_frames, -1)), columns=pdindex, index=range(start_frame, start_frame+n_frames))
-#             df.to_csv(os.path.splitext(fpath)[0] + ".csv")
+        #     df = pd.DataFrame(data.reshape((n_frames, -1)), columns=pdindex, index=range(start_frame, start_frame+n_frames))
+        #     df.to_csv(os.path.splitext(fpath)[0] + ".csv")
         pass
 
 

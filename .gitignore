@@ -26,4 +26,5 @@ logs
 
 # End of https://www.toptal.com/developers/gitignore/api/vscode
 
-src/*.sh
+**.sh
+run_acinoset.sh

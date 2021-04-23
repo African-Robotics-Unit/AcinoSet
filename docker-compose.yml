@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  acinoset:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.acinoset.cui
+    image: acinoset_cui
+    volumes:
+      - ./src:/workplace
+      - ./data:/data
+    working_dir: /workplace
