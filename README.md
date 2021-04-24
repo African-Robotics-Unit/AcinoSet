@@ -102,7 +102,7 @@ python all_optimizations.py --data_dir 2019_03_09/lily/run --start_frame 70 --en
 
 ### Citation 
 
-We as that if you use our code or data, please kindly cite (and note it is accepted to** ICRA 2021**, so please check back for an updated ref):
+We ask that if you use our code or data, kindly cite (and note it is accepted to **ICRA 2021**, so please check back for an updated ref):
 
 ```
 @misc{joska2021acinoset,
