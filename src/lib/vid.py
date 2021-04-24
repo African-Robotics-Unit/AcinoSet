@@ -71,7 +71,7 @@ class VideoProcessor(object):
 
     def frame_count(self):
         return self.nframes
-    
+
     def codec(self):
         return self.CODEC
 
