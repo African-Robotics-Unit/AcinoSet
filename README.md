@@ -99,3 +99,18 @@ python all_optimizations.py --data_dir 2019_03_09/lily/run --start_frame 70 --en
 ```
 
 **NB**: When running the FTE, we recommend that you use the MA86 solver. For details on how to set this up, see [these instructions](https://github.com/African-Robotics-Unit/docs/blob/main/linear-solvers.md).
+
+### Citation 
+
+We as that if you use our code or data, please kindly cite (and note it is accepted to** ICRA 2021**, so please check back for an updated ref):
+
+```
+@misc{joska2021acinoset,
+      title={AcinoSet: A 3D Pose Estimation Dataset and Baseline Models for Cheetahs in the Wild}, 
+      author={Daniel Joska and Liam Clark and Naoya Muramatsu and Ricardo Jericevich and Fred Nicolls and Alexander Mathis and Mackenzie W. Mathis and Amir Patel},
+      year={2021},
+      eprint={2103.13282},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+```
