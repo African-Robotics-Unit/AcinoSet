@@ -2,19 +2,18 @@ from argparse import ArgumentParser
 
 # imports from notebooks
 import os
-import pickle
+import json
 import numpy as np
 import sympy as sp
 import pandas as pd
+import pyomo.environ as pyo
 import matplotlib.pyplot as plt
-import pathlib
 from glob import glob
 from time import time
 from scipy.stats import linregress
-from pyomo.environ import *
-from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
+from pyomo.opt import SolverFactory
 from lib import misc, utils, app
-from lib.calib import triangulate_points_fisheye, project_points_fisheye
+from lib.calib import project_points_fisheye, triangulate_points_fisheye
 
 plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 
@@ -31,179 +30,62 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     r_y1 = [misc.redescending_loss(i, redesc_a, redesc_b, redesc_c) for i in r_x]
     r_y2 = abs(r_x)
     r_y3 = r_x ** 2
-    plt.figure()
-    plt.plot(r_x,r_y1, label="Redescending")
-    plt.plot(r_x,r_y2, label="Absolute (linear)")
-    plt.plot(r_x,r_y3, label="Quadratic")
-    ax = plt.gca()
-    ax.set_ylim((-5, 50))
-    ax.legend()
     if plot:
+        plt.figure()
+        plt.plot(r_x,r_y1, label="Redescending")
+        plt.plot(r_x,r_y2, label="Absolute (linear)")
+        plt.plot(r_x,r_y3, label="Quadratic")
+        ax = plt.gca()
+        ax.set_ylim((-5, 50))
+        ax.legend()
         plt.show(block=True)
 
     t0 = time()
 
-    assert os.path.exists(DATA_DIR)
     OUT_DIR = os.path.join(DATA_DIR, 'fte')
     os.makedirs(OUT_DIR, exist_ok=True)
-
+    
     app.start_logging(os.path.join(OUT_DIR, 'fte.log'))
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
-    end_frame = tot_frames if end_frame == -1 else end_frame
 
-    start_frame -= 1    # 0 based indexing
-    assert start_frame >= 0
-    N = end_frame - start_frame
-    Ts = 1.0 / fps  # timestep
+    with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
+        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
-    ## ========= POSE FUNCTIONS ========
-    #SYMBOLIC ROTATION MATRIX FUNCTIONS
-    def rot_x(x):
-        c = sp.cos(x)
-        s = sp.sin(x)
-        return sp.Matrix([
-            [1, 0, 0],
-            [0, c, s],
-            [0, -s, c]
-        ])
-
-    def rot_y(y):
-        c = sp.cos(y)
-        s = sp.sin(y)
-        return sp.Matrix([
-            [c, 0, -s],
-            [0, 1, 0],
-            [s, 0, c]
-        ])
-
-    def rot_z(z):
-        c = sp.cos(z)
-        s = sp.sin(z)
-        return sp.Matrix([
-            [c, s, 0],
-            [-s, c, 0],
-            [0, 0, 1]
-        ])
-
-    L = 14  # number of joints in the cheetah model
-
-    # defines arrays of angles, velocities and accelerations
-    phi     = [sp.symbols(f"\\phi_{{{l}}}")   for l in range(L)]
-    theta   = [sp.symbols(f"\\theta_{{{l}}}") for l in range(L)]
-    psi     = [sp.symbols(f"\\psi_{{{l}}}")   for l in range(L)]
-
-    #ROTATIONS
-    RI_0 = rot_z(psi[0]) @ rot_x(phi[0]) @ rot_y(theta[0]) # head
-    R0_I = RI_0.T
-    RI_1 = rot_z(psi[1]) @ rot_x(phi[1]) @ rot_y(theta[1]) @ RI_0 # neck
-    R1_I = RI_1.T
-    RI_2 = rot_y(theta[2]) @ RI_1 # front torso
-    R2_I = RI_2.T
-    RI_3 = rot_z(psi[3])@ rot_x(phi[3]) @ rot_y(theta[3]) @ RI_2 # back torso
-    R3_I = RI_3.T
-    RI_4 = rot_z(psi[4]) @ rot_y(theta[4]) @ RI_3 # tail base
-    R4_I = RI_4.T
-    RI_5 = rot_z(psi[5]) @ rot_y(theta[5]) @ RI_4 # tail mid
-    R5_I = RI_5.T
-    RI_6 = rot_y(theta[6]) @ RI_2 # l_shoulder
-    R6_I = RI_6.T
-    RI_7 = rot_y(theta[7]) @ RI_6 # l_front_knee
-    R7_I = RI_7.T
-    RI_8 = rot_y(theta[8]) @ RI_2 # r_shoulder
-    R8_I = RI_8.T
-    RI_9 = rot_y(theta[9]) @ RI_8 # r_front_knee
-    R9_I = RI_9.T
-    RI_10 = rot_y(theta[10]) @ RI_3 # l_hip
-    R10_I = RI_10.T
-    RI_11 = rot_y(theta[11]) @ RI_10 # l_back_knee
-    R11_I = RI_11.T
-    RI_12 = rot_y(theta[12]) @ RI_3 # r_hip
-    R12_I = RI_12.T
-    RI_13 = rot_y(theta[13]) @ RI_12 # r_back_knee
-    R13_I = RI_13.T
-
-    # defines the position, velocities and accelerations in the inertial frame
-    x,   y,   z   = sp.symbols("x y z")
-    dx,  dy,  dz  = sp.symbols("\\dot{x} \\dot{y} \\dot{z}")
-    ddx, ddy, ddz = sp.symbols("\\ddot{x} \\ddot{y} \\ddot{z}")
-    # x_l, y_l, z_l = sp.symbols("x_l y_l z_l") # exclude lure for now
-
-
-    # SYMBOLIC CHEETAH POSE POSITIONS
-    p_head          = sp.Matrix([x, y, z])
-
-    p_l_eye         = p_head         + R0_I  @ sp.Matrix([0, 0.03, 0])
-    p_r_eye         = p_head         + R0_I  @ sp.Matrix([0, -0.03, 0])
-    p_nose          = p_head         + R0_I  @ sp.Matrix([0.055, 0, -0.055])
-
-    p_neck_base     = p_head         + R1_I  @ sp.Matrix([-0.28, 0, 0])
-    p_spine         = p_neck_base    + R2_I  @ sp.Matrix([-0.37, 0, 0])
-
-    p_tail_base     = p_spine        + R3_I  @ sp.Matrix([-0.37, 0, 0])
-    p_tail_mid      = p_tail_base    + R4_I  @ sp.Matrix([-0.28, 0, 0])
-    p_tail_tip      = p_tail_mid     + R5_I  @ sp.Matrix([-0.36, 0, 0])
-
-    p_l_shoulder    = p_neck_base    + R2_I  @ sp.Matrix([-0.04, 0.08, -0.10])
-    p_l_front_knee  = p_l_shoulder   + R6_I  @ sp.Matrix([0, 0, -0.24])
-    p_l_front_ankle = p_l_front_knee + R7_I  @ sp.Matrix([0, 0, -0.28])
-
-    p_r_shoulder    = p_neck_base    + R2_I  @ sp.Matrix([-0.04, -0.08, -0.10])
-    p_r_front_knee  = p_r_shoulder   + R8_I  @ sp.Matrix([0, 0, -0.24])
-    p_r_front_ankle = p_r_front_knee + R9_I  @ sp.Matrix([0, 0, -0.28])
-
-    p_l_hip         = p_tail_base    + R3_I  @ sp.Matrix([0.12, 0.08, -0.06])
-    p_l_back_knee   = p_l_hip        + R10_I @ sp.Matrix([0, 0, -0.32])
-    p_l_back_ankle  = p_l_back_knee  + R11_I @ sp.Matrix([0, 0, -0.25])
-
-    p_r_hip         = p_tail_base    + R3_I  @ sp.Matrix([0.12, -0.08, -0.06])
-    p_r_back_knee   = p_r_hip        + R12_I @ sp.Matrix([0, 0, -0.32])
-    p_r_back_ankle  = p_r_back_knee  + R13_I @ sp.Matrix([0, 0, -0.25])
-
-    # p_lure          = sp.Matrix([x_l, y_l, z_l])
+    # symbolic vars
+    idx       = misc.get_pose_params()
+    sym_list  = sp.symbols(list(idx.keys()))
+    positions = misc.get_3d_marker_coords(sym_list)
 
     # ========= LAMBDIFY SYMBOLIC FUNCTIONS ========
-    positions = sp.Matrix([
-        p_l_eye.T, p_r_eye.T, p_nose.T,
-        p_neck_base.T, p_spine.T,
-        p_tail_base.T, p_tail_mid.T, p_tail_tip.T,
-        p_l_shoulder.T, p_l_front_knee.T, p_l_front_ankle.T,
-        p_r_shoulder.T, p_r_front_knee.T, p_r_front_ankle.T,
-        p_l_hip.T, p_l_back_knee.T, p_l_back_ankle.T,
-        p_r_hip.T, p_r_back_knee.T, p_r_back_ankle.T,
-    #     p_lure.T
-    ])
 
-    func_map = {"sin":sin, "cos":cos, "ImmutableDenseMatrix":np.array}
-    sym_list = [x, y, z,
-                *phi, *theta, *psi,
-    #             x_l, y_l, z_l
-               ]
+    func_map   = {'sin':pyo.sin, 'cos':pyo.cos, 'ImmutableDenseMatrix':np.array}
     pose_to_3d = sp.lambdify(sym_list, positions, modules=[func_map])
-    pos_funcs = []
+    pos_funcs  = []
     for i in range(positions.shape[0]):
         lamb = sp.lambdify(sym_list, positions[i,:], modules=[func_map])
         pos_funcs.append(lamb)
 
+
     # ========= PROJECTION FUNCTIONS ========
+
     def pt3d_to_2d(x, y, z, K, D, R, t):
         x_2d = x*R[0,0] + y*R[0,1] + z*R[0,2] + t.flatten()[0]
         y_2d = x*R[1,0] + y*R[1,1] + z*R[1,2] + t.flatten()[1]
         z_2d = x*R[2,0] + y*R[2,1] + z*R[2,2] + t.flatten()[2]
-        #project onto camera plane
-        a = x_2d/z_2d
-        b = y_2d/z_2d
-        #fisheye params
-        r = (a**2 + b**2 +1e-12)**0.5
-        th = atan(r)
-        #distortion
+        # project onto camera plane
+        a    = x_2d/z_2d
+        b    = y_2d/z_2d
+        # fisheye params
+        r    = (a**2 + b**2 +1e-12)**0.5
+        th   = pyo.atan(r)
+        # distortion
         th_D = th * (1 + D[0]*th**2 + D[1]*th**4 + D[2]*th**6 + D[3]*th**8)
-        x_P = a*th_D/r
-        y_P = b*th_D/r
-        u = K[0,0]*x_P + K[0,2]
-        v = K[1,1]*y_P + K[1,2]
+        x_P  = a*th_D/r
+        y_P  = b*th_D/r
+        u    = K[0,0]*x_P + K[0,2]
+        v    = K[1,1]*y_P + K[1,2]
         return u, v
 
     def pt3d_to_x2d(x, y, z, K, D, R, t):
@@ -214,45 +96,56 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         v = pt3d_to_2d(x, y, z, K, D, R, t)[1]
         return v
 
+
     # ========= IMPORT CAMERA & SCENE PARAMS ========
+
     K_arr, D_arr, R_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
     D_arr = D_arr.reshape((-1,4))
+    assert res == cam_res
 
     # ========= IMPORT DATA ========
+
     markers = misc.get_markers()
-
-    def get_meas_from_df(n, c, l, d):
-        n_mask = points_2d_df["frame"]== n-1
-        l_mask = points_2d_df["marker"]== markers[l-1]
-        c_mask = points_2d_df["camera"]== c-1
-        d_idx = {1:"x", 2:"y"}
-        val = points_2d_df[n_mask & l_mask & c_mask]
-        return val[d_idx[d]].values[0]
-
-    def get_likelihood_from_df(n, c, l):
-        n_mask = points_2d_df["frame"]== n-1
-        l_mask = points_2d_df["marker"]== markers[l-1]
-        c_mask = points_2d_df["camera"]== c-1
-        val = points_2d_df[n_mask & l_mask & c_mask]
-        return val["likelihood"].values[0]
-
-    proj_funcs = [pt3d_to_x2d, pt3d_to_y2d]
 
     R = 5 # measurement standard deviation
 
     Q = [ # model parameters variance
-        4, 7, 5, # x, y, z
-        13, 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, #  phi_1, ... , phi_14
-        9, 18, 43, 53, 90, 118, 247, 186, 194, 164, 295, 243, 334, 149, # theta_1, ... , theta_n
-        26, 12, 0, 34, 43, 51, 0, 0, 0, 0, 0, 0, 0, 0, # psi_1, ... , psi_n
-    #     ?, ?, ? # lure's x, y, z variance
+        4, 7, 5,    # head position in inertial
+        13, 9, 26,  # head rotation in inertial
+        32, 18, 12, # neck
+        43,         # front torso
+        10, 53, 34, # back torso
+        90, 43,     # tail_base
+        118, 51,    # tail_mid
+        247, 186,   # l_shoulder, l_front_knee
+        194, 164,   # r_shoulder, r_front_knee
+        295, 243,   # l_hip, l_back_knee
+        334, 149    # r_hip, r_back_knee
     ]
     Q = np.array(Q, dtype=np.float64)**2
+
+    def get_meas_from_df(n, c, l, d):
+        n_mask = points_2d_df['frame']  == n-1
+        l_mask = points_2d_df['marker'] == markers[l-1]
+        c_mask = points_2d_df['camera'] == c-1
+        d_idx  = {1:'x', 2:'y'}
+        val    = points_2d_df[n_mask & l_mask & c_mask]
+        return val[d_idx[d]].values[0]
+
+    def get_likelihood_from_df(n, c, l):
+        n_mask = points_2d_df['frame']  == n-1
+        l_mask = points_2d_df['marker'] == markers[l-1]
+        c_mask = points_2d_df['camera'] == c-1
+        val    = points_2d_df[n_mask & l_mask & c_mask]
+        return val['likelihood'].values[0]
+
+    proj_funcs = [pt3d_to_x2d, pt3d_to_y2d]
 
     #===================================================
     #                   Load in data
     #===================================================
-    print("Loading data")
+
+    print('Loading data')
 
     df_paths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
 
@@ -263,305 +156,293 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         triangulate_points_fisheye
     )
 
-    # estimate initial points
-    nose_pts = points_3d_df[points_3d_df["marker"]=="nose"][["frame", "x", "y", "z"]].values
-    x_slope, x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
-    y_slope, y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
-    z_slope, z_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,3])
-    frame_est = np.arange(end_frame)
-    x_est = frame_est*x_slope + x_intercept
-    y_est = frame_est*y_slope + y_intercept
-    z_est = frame_est*z_slope + z_intercept
-    psi_est = np.arctan2(y_slope, x_slope)
-
     #===================================================
     #                   Optimisation
     #===================================================
-    print("\nStarted Optimisation")
-    m = ConcreteModel(name = "Cheetah from measurements")
-    m.Ts = Ts
+
+    print('Initialising params & variables')
+    m = pyo.ConcreteModel(name = 'Cheetah from measurements')
 
     # ===== SETS =====
-    N = end_frame-start_frame # number of timesteps in trajectory
-    P = 3 + len(phi)+len(theta)+len(psi)# + 3  # number of pose parameters (x, y, z, phi_1..n, theta_1..n, psi_1..n, x_l, y_l, z_l)
-    L = len(pos_funcs) # number of dlc labels per frame
-    C = len(K_arr) # number of cameras
-    D2 = 2 # dimensionality of measurements
-    D3 = 3 # dimensionality of measurements
 
-    m.N = RangeSet(N)
-    m.P = RangeSet(P)
-    m.L = RangeSet(L)
-    m.C = RangeSet(C)
-    m.D2 = RangeSet(D2)
-    m.D3 = RangeSet(D3)
+    N  = end_frame-start_frame # number of timesteps in trajectory
+    P  = len(sym_list)         # number of pose parameters
+    L  = len(markers)          # number of dlc labels per frame
+    C  = n_cams                # number of cameras
+    D2 = 2                     # dimensionality of measurements (image points)
+    D3 = 3                     # dimensionality of measurements (3d points)
+
+    m.Ts = 1.0/fps # timestep
+    m.N  = pyo.RangeSet(N)
+    m.P  = pyo.RangeSet(P)
+    m.L  = pyo.RangeSet(L)
+    m.C  = pyo.RangeSet(C)
+    m.D2 = pyo.RangeSet(D2)
+    m.D3 = pyo.RangeSet(D3)
 
     # ======= WEIGHTS =======
+
     def init_meas_weights(model, n, c, l):
         likelihood = get_likelihood_from_df(n+start_frame, c, l)
         if likelihood > dlc_thresh:
             return 1/R
         else:
             return 0
-    m.meas_err_weight = Param(m.N, m.C, m.L, initialize=init_meas_weights, mutable=True)  # IndexError: index 0 is out of bounds for axis 0 with size 0 means that N is too large
 
     def init_model_weights(m, p):
-        if Q[p-1] != 0.0:
-            return 1/Q[p-1]
-        else:
-            return 0
-    m.model_err_weight = Param(m.P, initialize=init_model_weights)
-
-    # ===== PARAMETERS =====
-    print("Initialising params & variables")
+        return 1/Q[p-1]
 
     def init_measurements_df(m, n, c, l, d2):
         return get_meas_from_df(n+start_frame, c, l, d2)
-    m.meas = Param(m.N, m.C, m.L, m.D2, initialize=init_measurements_df)
 
-    # ===== VARIABLES =====
-    m.x = Var(m.N, m.P) #position
-    m.dx = Var(m.N, m.P) #velocity
-    m.ddx = Var(m.N, m.P) #acceleration
-    m.poses = Var(m.N, m.L, m.D3)
-    m.slack_model = Var(m.N, m.P)
-    m.slack_meas = Var(m.N, m.C, m.L, m.D2, initialize=0.0)
+    m.meas_err_weight  = pyo.Param(m.N, m.C, m.L, initialize = init_meas_weights, mutable=True)
+    m.model_err_weight = pyo.Param(m.P, initialize = init_model_weights)
+    m.meas             = pyo.Param(m.N, m.C, m.L, m.D2, initialize = init_measurements_df)
+
+    # ===== MODEL VARIABLES =====
+
+    m.x           = pyo.Var(m.N, m.P) # position
+    m.dx          = pyo.Var(m.N, m.P) # velocity
+    m.ddx         = pyo.Var(m.N, m.P) # acceleration
+    m.poses       = pyo.Var(m.N, m.L, m.D3)
+    m.slack_model = pyo.Var(m.N, m.P)
+    m.slack_meas  = pyo.Var(m.N, m.C, m.L, m.D2, initialize=0.0)
 
     # ===== VARIABLES INITIALIZATION =====
-    init_x = np.zeros((N, P))
-    init_x[:,0] = x_est[start_frame: start_frame+N] #x # change this to [start_frame: end_frame]?
-    init_x[:,1] = y_est[start_frame: start_frame+N] #y
-    init_x[:,2] = z_est[start_frame: start_frame+N] #z
-    init_x[:,31] = psi_est # yaw = psi
-    init_dx = np.zeros((N, P))
-    init_ddx = np.zeros((N, P))
+
+    # estimate initial points
+    frame_est = np.arange(end_frame)
+    init_x    = np.zeros((N, P))
+    init_dx   = np.zeros((N, P))
+    init_ddx  = np.zeros((N, P))
+
+    nose_pts = points_3d_df[points_3d_df['marker']=='nose'][['frame', 'x', 'y', 'z']].values
+    x_slope, x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
+    y_slope, y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
+    z_slope, z_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,3])
+
+    x_est   = frame_est*x_slope + x_intercept
+    y_est   = frame_est*y_slope + y_intercept
+    z_est   = frame_est*z_slope + z_intercept
+    psi_est = np.arctan2(y_slope, x_slope)
+
+    init_x[:,idx['x_0']]   = x_est[start_frame: end_frame]
+    init_x[:,idx['y_0']]   = y_est[start_frame: end_frame]
+    init_x[:,idx['z_0']]   = z_est[start_frame: end_frame]
+    init_x[:,idx['psi_0']] = psi_est # psi = yaw
+
     for n in m.N:
         for p in m.P:
-            if n<len(init_x): #init using known values
-                m.x[n,p].value = init_x[n-1,p-1]
-                m.dx[n,p].value = init_dx[n-1,p-1]
-                m.ddx[n,p].value = init_ddx[n-1,p-1]
-            else: #init using last known value
-                m.x[n,p].value = init_x[-1,p-1]
-                m.dx[n,p].value = init_dx[-1,p-1]
-                m.ddx[n,p].value = init_ddx[-1,p-1]
-        #init pose
-        var_list = [m.x[n,p].value for p in range(1, P+1)]
+            m.x[n,p].value   = init_x[n-1,p-1]
+            m.dx[n,p].value  = init_dx[n-1,p-1]
+            m.ddx[n,p].value = init_ddx[n-1,p-1]
+            # to init using last known value, use m.x[n,p].value = init_x[-1,p-1]
+        # init pose
+        var_list = [m.x[n,p].value for p in m.P]
         for l in m.L:
             [pos] = pos_funcs[l-1](*var_list)
             for d3 in m.D3:
                 m.poses[n,l,d3].value = pos[d3-1]
 
     # ===== CONSTRAINTS =====
-    # 3D POSE
+
+    print('Defining constraints')
+
+    # NOTE: 1 based indexing for pyomo!!!!...@#^!@#&
+    for state in idx:
+        idx[state] += 1
+
+    #===== POSE CONSTRAINTS =====
+
+    print('- Pose')
+
     def pose_constraint(m,n,l,d3):
-        #get 3d points
-        var_list = [m.x[n,p] for p in range(1, P+1)]
-        [pos] = pos_funcs[l-1](*var_list)
+        var_list = [m.x[n,p] for p in m.P]
+        [pos] = pos_funcs[l-1](*var_list) # get 3d points
         return pos[d3-1] == m.poses[n,l,d3]
 
-    m.pose_constraint = Constraint(m.N, m.L, m.D3, rule=pose_constraint)
+    m.pose_constraint = pyo.Constraint(m.N, m.L, m.D3, rule = pose_constraint)
 
-    # INTEGRATION
-    print("Numerical integration")
-    def backwards_euler_pos(m,n,p): # position
+    # define these constraint functions in a loop?
+    # head
+    def head_phi_0(m,n):
+        return abs(m.x[n,idx['phi_0']]) <= np.pi/6
+    def head_theta_0(m,n):
+        return abs(m.x[n,idx['theta_0']]) <= np.pi/6
+
+    # neck
+    def neck_phi_1(m,n):
+        return abs(m.x[n,idx['phi_1']]) <= np.pi/6
+    def neck_theta_1(m,n):
+        return abs(m.x[n,idx['theta_1']]) <= np.pi/6
+    def neck_psi_1(m,n):
+        return abs(m.x[n,idx['psi_1']]) <= np.pi/6
+
+    # front torso
+    def front_torso_theta_2(m,n):
+        return abs(m.x[n,idx['theta_2']]) <= np.pi/6
+
+    # back torso
+    def back_torso_theta_3(m,n):
+        return abs(m.x[n,idx['theta_3']]) <= np.pi/6
+    def back_torso_phi_3(m,n):
+        return abs(m.x[n,idx['phi_3']]) <= np.pi/6
+    def back_torso_psi_3(m,n):
+        return abs(m.x[n,idx['psi_3']]) <= np.pi/6
+
+    # tail base
+    def tail_base_theta_4(m,n):
+        return abs(m.x[n,idx['theta_4']]) <= np.pi/1.5
+    def tail_base_psi_4(m,n):
+        return abs(m.x[n,idx['psi_4']]) <= np.pi/1.5
+
+    # tail mid
+    def tail_mid_theta_5(m,n):
+        return abs(m.x[n,idx['theta_5']]) <= np.pi/1.5
+    def tail_mid_psi_5(m,n):
+        return abs(m.x[n,idx['psi_5']]) <= np.pi/1.5
+
+    # front left leg
+    def l_shoulder_theta_6(m,n):
+        return abs(m.x[n,idx['theta_6']]) <= np.pi/2
+    def l_front_knee_theta_7(m,n):
+        return abs(m.x[n,idx['theta_7']] + np.pi/2) <= np.pi/2
+
+    # front right leg
+    def r_shoulder_theta_8(m,n):
+        return abs(m.x[n,idx['theta_8']]) <= np.pi/2
+    def r_front_knee_theta_9(m,n):
+        return abs(m.x[n,idx['theta_9']] + np.pi/2) <= np.pi/2
+
+    # back left leg
+    def l_hip_theta_10(m,n):
+        return abs(m.x[n,idx['theta_10']]) <= np.pi/2
+    def l_back_knee_theta_11(m,n):
+        return abs(m.x[n,idx['theta_11']] - np.pi/2) <= np.pi/2
+
+    # back right leg
+    def r_hip_theta_12(m,n):
+        return abs(m.x[n,idx['theta_12']]) <= np.pi/2
+    def r_back_knee_theta_13(m,n):
+        return abs(m.x[n,idx['theta_13']] - np.pi/2) <= np.pi/2
+
+    m.head_phi_0           = pyo.Constraint(m.N, rule = head_phi_0)
+    m.head_theta_0         = pyo.Constraint(m.N, rule = head_theta_0)
+    m.neck_phi_1           = pyo.Constraint(m.N, rule = neck_phi_1)
+    m.neck_theta_1         = pyo.Constraint(m.N, rule = neck_theta_1)
+    m.neck_psi_1           = pyo.Constraint(m.N, rule = neck_psi_1)
+    m.front_torso_theta_2  = pyo.Constraint(m.N, rule = front_torso_theta_2)
+    m.back_torso_theta_3   = pyo.Constraint(m.N, rule = back_torso_theta_3)
+    m.back_torso_phi_3     = pyo.Constraint(m.N, rule = back_torso_phi_3)
+    m.back_torso_psi_3     = pyo.Constraint(m.N, rule = back_torso_psi_3)
+    m.tail_base_theta_4    = pyo.Constraint(m.N, rule = tail_base_theta_4)
+    m.tail_base_psi_4      = pyo.Constraint(m.N, rule = tail_base_psi_4)
+    m.tail_mid_theta_5     = pyo.Constraint(m.N, rule = tail_mid_theta_5)
+    m.tail_mid_psi_5       = pyo.Constraint(m.N, rule = tail_mid_psi_5)
+    m.l_shoulder_theta_6   = pyo.Constraint(m.N, rule = l_shoulder_theta_6)
+    m.l_front_knee_theta_7 = pyo.Constraint(m.N, rule = l_front_knee_theta_7)
+    m.r_shoulder_theta_8   = pyo.Constraint(m.N, rule = r_shoulder_theta_8)
+    m.r_front_knee_theta_9 = pyo.Constraint(m.N, rule = r_front_knee_theta_9)
+    m.l_hip_theta_10       = pyo.Constraint(m.N, rule = l_hip_theta_10)
+    m.l_back_knee_theta_11 = pyo.Constraint(m.N, rule = l_back_knee_theta_11)
+    m.r_hip_theta_12       = pyo.Constraint(m.N, rule = r_hip_theta_12)
+    m.r_back_knee_theta_13 = pyo.Constraint(m.N, rule = r_back_knee_theta_13)
+
+    # ===== MEASUREMENT CONSTRAINTS =====
+
+    print('- Measurement')
+
+    def measurement_constraints(m, n, c, l, d2):
+        # project
+        K, D, R, t = K_arr[c-1], D_arr[c-1], R_arr[c-1], t_arr[c-1]
+        x, y, z    = m.poses[n,l,idx['x_0']], m.poses[n,l,idx['y_0']], m.poses[n,l,idx['z_0']]
+        return proj_funcs[d2-1](x, y, z, K, D, R, t) - m.meas[n, c, l, d2] - m.slack_meas[n, c, l, d2] == 0
+
+    m.measurement = pyo.Constraint(m.N, m.C, m.L, m.D2, rule = measurement_constraints)
+
+    # ===== INTEGRATION CONSTRAINTS =====
+
+    print('- Numerical integration')
+
+    def backwards_euler_pos(m,n,p):
         if n > 1:
-    #             return m.x[n,p] == m.x[n-1,p] + m.h*m.dx[n-1,p] + m.h**2 * m.ddx[n-1,p]/2
             return m.x[n,p] == m.x[n-1,p] + m.Ts*m.dx[n,p]
-
         else:
-            return Constraint.Skip
-    m.integrate_p = Constraint(m.N, m.P, rule = backwards_euler_pos)
+            return pyo.Constraint.Skip
 
-    def backwards_euler_vel(m,n,p): # velocity
+    def backwards_euler_vel(m,n,p):
         if n > 1:
             return m.dx[n,p] == m.dx[n-1,p] + m.Ts*m.ddx[n,p]
         else:
-            return Constraint.Skip
-    m.integrate_v = Constraint(m.N, m.P, rule = backwards_euler_vel)
+            return pyo.Constraint.Skip
 
-    # MODEL
     def constant_acc(m, n, p):
         if n > 1:
             return m.ddx[n,p] == m.ddx[n-1,p] + m.slack_model[n,p]
         else:
-            return Constraint.Skip
-    m.constant_acc = Constraint(m.N, m.P, rule = constant_acc)
+            return pyo.Constraint.Skip
 
-    # MEASUREMENT
-    def measurement_constraints(m, n, c, l, d2):
-        #project
-        K, D, R, t = K_arr[c-1], D_arr[c-1], R_arr[c-1], t_arr[c-1]
-        x, y, z = m.poses[n,l,1], m.poses[n,l,2], m.poses[n,l,3]
-        return proj_funcs[d2-1](x, y, z, K, D, R, t) - m.meas[n, c, l, d2] - m.slack_meas[n, c, l, d2] ==0
-    m.measurement = Constraint(m.N, m.C, m.L, m.D2, rule = measurement_constraints)
-
-    #===== POSE CONSTRAINTS (Note 1 based indexing for pyomo!!!!...@#^!@#&) =====
-    #Head
-    def head_psi_0(m,n):
-        return abs(m.x[n,4]) <= np.pi/6
-    m.head_psi_0 = Constraint(m.N, rule=head_psi_0)
-    def head_theta_0(m,n):
-        return abs(m.x[n,18]) <= np.pi/6
-    m.head_theta_0 = Constraint(m.N, rule=head_theta_0)
-
-    #Neck
-    def neck_phi_1(m,n):
-        return abs(m.x[n,5]) <= np.pi/6
-    m.neck_phi_1 = Constraint(m.N, rule=neck_phi_1)
-    def neck_theta_1(m,n):
-        return abs(m.x[n,19]) <= np.pi/6
-    m.neck_theta_1 = Constraint(m.N, rule=neck_theta_1)
-    def neck_psi_1(m,n):
-        return abs(m.x[n,33]) <= np.pi/6
-    m.neck_psi_1 = Constraint(m.N, rule=neck_psi_1)
-
-    #Front torso
-    def front_torso_theta_2(m,n):
-        return abs(m.x[n,20]) <= np.pi/6
-    m.front_torso_theta_2 = Constraint(m.N, rule=front_torso_theta_2)
-
-    #Back torso
-    def back_torso_theta_3(m,n):
-        return abs(m.x[n,21]) <= np.pi/6
-    m.back_torso_theta_3 = Constraint(m.N, rule=back_torso_theta_3)
-    def back_torso_phi_3(m,n):
-        return abs(m.x[n,7]) <= np.pi/6
-    m.back_torso_phi_3 = Constraint(m.N, rule=back_torso_phi_3)
-    def back_torso_psi_3(m,n):
-        return abs(m.x[n,35]) <= np.pi/6
-    m.back_torso_psi_3 = Constraint(m.N, rule=back_torso_psi_3)
-
-    #Tail base
-    def tail_base_theta_4(m,n):
-        return abs(m.x[n,22]) <= np.pi/1.5
-    m.tail_base_theta_4 = Constraint(m.N, rule=tail_base_theta_4)
-    def tail_base_psi_4(m,n):
-        return abs(m.x[n,36]) <= np.pi/1.5
-    m.tail_base_psi_4 = Constraint(m.N, rule=tail_base_psi_4)
-
-    #Tail mid
-    def tail_mid_theta_5(m,n):
-        return abs(m.x[n,23]) <= np.pi/1.5
-    m.tail_mid_theta_5 = Constraint(m.N, rule=tail_mid_theta_5)
-    def tail_mid_psi_5(m,n):
-        return abs(m.x[n,37]) <= np.pi/1.5
-    m.tail_mid_psi_5 = Constraint(m.N, rule=tail_mid_psi_5)
-
-    #Front left leg
-    def l_shoulder_theta_6(m,n):
-        return abs(m.x[n,24]) <= np.pi/2
-    m.l_shoulder_theta_6 = Constraint(m.N, rule=l_shoulder_theta_6)
-    def l_front_knee_theta_7(m,n):
-        return abs(m.x[n,25] + np.pi/2) <= np.pi/2
-    m.l_front_knee_theta_7 = Constraint(m.N, rule=l_front_knee_theta_7)
-
-    #Front right leg
-    def r_shoulder_theta_8(m,n):
-        return abs(m.x[n,26]) <= np.pi/2
-    m.r_shoulder_theta_8 = Constraint(m.N, rule=r_shoulder_theta_8)
-    def r_front_knee_theta_9(m,n):
-        return abs(m.x[n,27] + np.pi/2) <= np.pi/2
-    m.r_front_knee_theta_9 = Constraint(m.N, rule=r_front_knee_theta_9)
-
-    #Back left leg
-    def l_hip_theta_10(m,n):
-        return abs(m.x[n,28]) <= np.pi/2
-    m.l_hip_theta_10 = Constraint(m.N, rule=l_hip_theta_10)
-    def l_back_knee_theta_11(m,n):
-        return abs(m.x[n,29] - np.pi/2) <= np.pi/2
-    m.l_back_knee_theta_11 = Constraint(m.N, rule=l_back_knee_theta_11)
-
-    #Back right leg
-    def r_hip_theta_12(m,n):
-        return abs(m.x[n,30]) <= np.pi/2
-    m.r_hip_theta_12 = Constraint(m.N, rule=r_hip_theta_12)
-    def r_back_knee_theta_13(m,n):
-        return abs(m.x[n,31] - np.pi/2) <= np.pi/2
-    m.r_back_knee_theta_13 = Constraint(m.N, rule=r_back_knee_theta_13)
+    m.integrate_p  = pyo.Constraint(m.N, m.P, rule = backwards_euler_pos)
+    m.integrate_v  = pyo.Constraint(m.N, m.P, rule = backwards_euler_vel)
+    m.constant_acc = pyo.Constraint(m.N, m.P, rule = constant_acc)
 
     # ======= OBJECTIVE FUNCTION =======
+
+    print('Defining objective function')
+
     def obj(m):
-        slack_model_err = 0.0
-        slack_meas_err = 0.0
+        slack_model_err, slack_meas_err = 0.0, 0.0
         for n in m.N:
-            #Model Error
+            # model error
             for p in m.P:
                 slack_model_err += m.model_err_weight[p] * m.slack_model[n, p] ** 2
-            #Measurement Error
+            # measurement error
             for l in m.L:
                 for c in m.C:
                     for d2 in m.D2:
                         slack_meas_err += misc.redescending_loss(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2], redesc_a, redesc_b, redesc_c)
         return slack_meas_err + slack_model_err
 
-    m.obj = Objective(rule = obj)
+    m.obj = pyo.Objective(rule = obj)
 
-    # RUN THE SOLVER
+    # run the solver
     opt = SolverFactory(
         'ipopt',
         # executable='./CoinIpopt/build/bin/ipopt'
     )
 
     # solver options
-    opt.options["print_level"] = 5
-    opt.options["max_iter"] = 10000
-    opt.options["max_cpu_time"] = 3600
-    opt.options["tol"] = 1e-1
-    opt.options["OF_print_timing_statistics"] = "yes"
-    opt.options["OF_print_frequency_iter"] = 10
-    opt.options["OF_hessian_approximation"] = "limited-memory"
-    # opt.options["linear_solver"] = "ma86"
+    opt.options['tol'] = 1e-1
+    opt.options['print_level']  = 5
+    opt.options['max_iter']     = 10000
+    opt.options['max_cpu_time'] = 10000
+    opt.options['OF_print_timing_statistics'] = 'yes'
+    opt.options['OF_print_frequency_iter']    = 10
+    opt.options['OF_hessian_approximation']   = 'limited-memory'
+    # opt.options['linear_solver'] = 'ma86'
 
     t1 = time()
-    print("\nInitialization took {0:.2f} seconds\n".format(t1 - t0))
+    print('\nInitialization took {0:.2f} seconds\n'.format(t1 - t0))
 
     t0 = time()
     results = opt.solve(m, tee=True)
     t1 = time()
-    print("\nOptimization took {0:.2f} seconds\n".format(t1 - t0))
+    print('\nOptimization took {0:.2f} seconds\n'.format(t1 - t0))
 
     app.stop_logging()
+    
+    # ========= SAVE FTE RESULTS ========
+    
+    x, dx, ddx = [], [], []
+    for n in m.N:
+        x.append([m.x[n, p].value for p in m.P])
+        dx.append([m.dx[n, p].value for p in m.P])
+        ddx.append([m.ddx[n, p].value for p in m.P])
 
-    # ===== SAVE FTE RESULTS =====
-
-    def convert_m(m, pose_indices):
-        x_optimised, dx_optimised, ddx_optimised = [], [], []
-        for n in m.N:
-            x_optimised.append([value(m.x[n, p]) for p in m.P])
-            dx_optimised.append([value(m.dx[n, p]) for p in m.P])
-            ddx_optimised.append([value(m.ddx[n, p]) for p in m.P])
-
-        positions = [pose_to_3d(*states) for states in x_optimised]
-
-        # remove zero-valued vars
-        for n in m.N:
-            n -= 1 # remember pyomo's 1-based indexing
-            for p in pose_indices[::-1]:
-                    assert x_optimised[n][p] == 0
-                    del x_optimised[n][p]
-                    del dx_optimised[n][p]
-                    del ddx_optimised[n][p]
-
-        states = dict(
-            x=x_optimised,
-            dx=dx_optimised,
-            ddx=ddx_optimised,
-        )
-        return positions, states
-
-    [unused_pose_indices] = np.where(Q == 0)
-    positions, states = convert_m(m, unused_pose_indices)
-
-    out_fpath = os.path.join(OUT_DIR, f"fte.pickle")
-    app.save_optimised_cheetah(positions, out_fpath, extra_data=dict(**states, start_frame=start_frame))
-    app.save_3d_cheetah_as_2d(positions, OUT_DIR, scene_fpath, markers, project_points_fisheye, start_frame)
-
-    video_fpaths = sorted(glob(os.path.join(os.path.dirname(OUT_DIR), 'cam[1-9].mp4'))) # original vids should be in the parent dir
-    app.create_labeled_videos(video_fpaths, out_dir=OUT_DIR, draw_skeleton=True, pcutoff=dlc_thresh)
+    app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
     fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
-    app.plot_cheetah_states(states['x'], out_fpath=fig_fpath)
+    app.plot_cheetah_states(x, out_fpath=fig_fpath)
 
 
 def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
@@ -589,8 +470,6 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
-    end_frame = tot_frames if end_frame == -1 else end_frame
 
     # Load extrinsic params
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
@@ -598,12 +477,13 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     camera_params = [[K, D, R, T] for K, D, R, T in zip(k_arr, d_arr, r_arr, t_arr)]
 
     # other vars
-    start_frame -= 1 # 0 based indexing
-    assert start_frame >= 0
     n_frames = end_frame-start_frame
     sigma_bound = 3
     max_pixel_err = cam_res[0] # used in measurement covariance R
     sT = 1.0/fps # timestep
+
+    with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
+        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     # ========= FUNCTION DEFINITINOS ========
 
@@ -680,7 +560,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
     # try:
     #     lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
-    #     lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1])
+    #     lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
     #     lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
 
     #     lure_x_est = start_frame*lure_x_slope + lure_x_intercept # initial lure x
@@ -694,7 +574,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
 
     nose_pts = points_3d_df[points_3d_df["marker"]=="nose"][["frame", "x", "y", "z"]].values
-    nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
+    nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1]) 
     nose_y_slope, nose_y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
 
     nose_x_est = start_frame*nose_x_slope + nose_x_intercept # initial nose x
@@ -856,25 +736,23 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
                  )
     app.save_ekf(states, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
-    fig_fpath = os.path.join(OUT_DIR, 'ekf.pdf')
+    fig_fpath= os.path.join(OUT_DIR, 'ekf.svg')
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
 
 
-def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
+def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
     t0 = time()
 
     OUT_DIR = os.path.join(DATA_DIR, 'sba')
     os.makedirs(OUT_DIR, exist_ok=True)
-
+    
     app.start_logging(os.path.join(OUT_DIR, 'sba.log'))
 
     # load video info
-    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
-
-    start_frame -= 1    # 0 based indexing
-    assert start_frame >= 0
     N = end_frame-start_frame
+
+    with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
+        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     *_, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
@@ -892,14 +770,14 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     points_3d_df, residuals = app.sba_points_fisheye(scene_fpath, points_2d_df)
 
     app.stop_logging()
-
-    plt.plot(residuals['before'], label="Cost before")
-    plt.plot(residuals['after'], label="Cost after")
-    plt.legend()
-    fig_fpath = os.path.join(OUT_DIR, 'sba.svg')
-    plt.savefig(fig_fpath, transparent=True)
-    print(f'Saved {fig_fpath}\n')
-    plt.show(block=False)
+    if plot:
+        plt.plot(residuals['before'], label="Cost before")
+        plt.plot(residuals['after'], label="Cost after")
+        plt.legend()
+        fig_fpath = os.path.join(OUT_DIR, 'sba.svg')
+        plt.savefig(fig_fpath, transparent=True)
+        print(f'Saved {fig_fpath}\n')
+        plt.show(block=False)
 
     # ========= SAVE SBA RESULTS ========
 
@@ -914,13 +792,14 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
 
-def tri(DATA_DIR, DLC_DIR, start_frame: int, end_frame: int, dlc_thresh):
+def tri(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     OUT_DIR = os.path.join(DATA_DIR, 'tri')
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    start_frame -= 1 # 0 based indexing
-    assert start_frame >= 0
-    N = end_frame - start_frame
+    N = end_frame-start_frame
+
+    with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
+        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
@@ -932,11 +811,11 @@ def tri(DATA_DIR, DLC_DIR, start_frame: int, end_frame: int, dlc_thresh):
     points_2d_df = points_2d_df[points_2d_df["frame"].between(start_frame, end_frame-1)]
     points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
 
-    assert len(k_arr) == points_2d_df['camera'].nunique(), '{}'.format(points_2d_df['camera'])
+    assert len(k_arr) == points_2d_df['camera'].nunique()
 
     points_3d_df = utils.get_pairwise_3d_points_from_df(
         points_2d_df,
-        k_arr, d_arr.reshape((-1, 4)), r_arr, t_arr,
+        k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
         triangulate_points_fisheye
     )
 
@@ -957,46 +836,56 @@ def tri(DATA_DIR, DLC_DIR, start_frame: int, end_frame: int, dlc_thresh):
 
 def dlc(DATA_DIR, dlc_thresh):
     video_fpaths = sorted(glob(os.path.join(DATA_DIR, 'cam[1-9].mp4'))) # original vids should be in the parent dir
-    out_dir = os.path.join(DATA_DIR, 'dlc')
-    app.create_labeled_videos(video_fpaths, out_dir=out_dir, draw_skeleton=True, pcutoff=dlc_thresh)
+    OUT_DIR = os.path.join(DATA_DIR, 'dlc')
+    
+    with open(os.path.join(OUT_DIR, 'video_params.json'), 'w') as f:
+        json.dump(dict(dlc_thresh=dlc_thresh), f)
+    
+    app.create_labeled_videos(video_fpaths, out_dir=OUT_DIR, draw_skeleton=True, pcutoff=dlc_thresh)
 
 
 # ========= MAIN ========
 
 if __name__ == "__main__":
-    # python all_optimizations.py --data_dir /data/2019_03_07/phantom/flick --plot
     parser = ArgumentParser(description='All Optimizations')
-    parser.add_argument('--data_dir', type=str, help='The data directory path to the flick/run to be optimized')
-    parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start at')
-    parser.add_argument('--end_frame', type=int, default=-1, help='The frame at which the optimized reconstruction will end at')
+    parser.add_argument('--data_dir', type=str, help='The file path to the flick/run to be optimized')
+    parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start')
+    parser.add_argument('--end_frame', type=int, default=-1, help='The frame at which the optimized reconstruction will end')
     parser.add_argument('--dlc_thresh', type=float, default=0.8, help='The likelihood of the dlc points below which will be excluded from the optimization')
-    parser.add_argument('--plot', action='store_true', help='Showing plots')
+    parser.add_argument('--plot', action='store_true', help='Show the plots')
     args = parser.parse_args()
-
+    
     # ROOT_DATA_DIR = os.path.join("..", "data")
     DATA_DIR = os.path.normpath(args.data_dir)
-    assert os.path.exists(DATA_DIR)
+    assert os.path.exists(DATA_DIR), f'Data directory not found: {DATA_DIR}'
     DLC_DIR = os.path.join(DATA_DIR, 'dlc')
-    assert os.path.exists(DLC_DIR)
+    assert os.path.exists(DLC_DIR), f'DLC directory not found: {DLC_DIR}'
 
     # load DLC info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
     assert args.end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
-    end_frame = tot_frames if args.end_frame == -1 else args.end_frame
+    assert args.end_frame != 0, f'end_frame cannot be 0'
+    if args.end_frame < 0:
+        args.end_frame = args.end_frame % tot_frames + 1 # cyclic
+
+    assert 0 < args.start_frame < tot_frames, f'start_frame must be strictly between 0 and {tot_frames}'
+    assert 0 <= args.dlc_thresh <= 1, 'dlc_thresh must be from 0 to 1'
+    
+    args.start_frame -= 1 # 0 based indexing
 
     print('========== DLC ==========\n')
     dlc(DATA_DIR, args.dlc_thresh)
     print('========== Triangulation ==========\n')
-    tri(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    tri(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     plt.close('all')
     print('========== SBA ==========\n')
-    sba(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    sba(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh, args.plot)
     plt.close('all')
     print('========== EKF ==========\n')
-    ekf(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    ekf(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     plt.close('all')
     print('========== FTE ==========\n')
-    fte(DATA_DIR, DLC_DIR, args.start_frame, end_frame, args.dlc_thresh)
+    fte(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh, args.plot)
     plt.close('all')
 
     if args.plot:
