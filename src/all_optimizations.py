@@ -32,9 +32,9 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     r_y3 = r_x ** 2
     if plot:
         plt.figure()
-        plt.plot(r_x,r_y1, label="Redescending")
-        plt.plot(r_x,r_y2, label="Absolute (linear)")
-        plt.plot(r_x,r_y3, label="Quadratic")
+        plt.plot(r_x,r_y1, label='Redescending')
+        plt.plot(r_x,r_y2, label='Absolute (linear)')
+        plt.plot(r_x,r_y3, label='Quadratic')
         ax = plt.gca()
         ax.set_ylim((-5, 50))
         ax.legend()
@@ -528,7 +528,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
     # Load DLC 2D point files (.h5 outputs)
     dlc_2d_point_files = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
-    assert(len(dlc_2d_point_files) == n_cams), f"# of dlc '.h5' files != # of cams in {n_cams}_cam_scene_sba.json"
+    assert(len(dlc_2d_point_files) == n_cams), f'# of dlc .h5 files != # of cams in {n_cams}_cam_scene_sba.json'
 
     # Load Measurement Data (pixels, likelihood)
     points_2d_df = utils.load_dlc_points_as_df(dlc_2d_point_files, verbose=False)
@@ -559,7 +559,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     states = np.zeros(n_states)
 
     # try:
-    #     lure_pts = points_3d_df[points_3d_df["marker"]=="lure"][["frame", "x", "y", "z"]].values
+    #     lure_pts = points_3d_df[points_3d_df['marker']=='lure'][['frame', 'x', 'y', 'z']].values
     #     lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
     #     lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
 
@@ -569,11 +569,11 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     #     states[[idx['x_l'], idx['y_l']]] = [lure_x_est, lure_y_est]             # lure x & y in inertial
     #     states[[idx['dx_l'], idx['dy_l']]] = [lure_x_slope/sT, lure_y_slope/sT] # lure x & y velocity in inertial
     # except ValueError as e: # for when there is no lure data
-    #     print(f"Lure initialisation error: '{e}' -> Lure states initialised to zero")
+    #     print(f'Lure initialisation error: '{e}' -> Lure states initialised to zero')
 
     points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
 
-    nose_pts = points_3d_df[points_3d_df["marker"]=="nose"][["frame", "x", "y", "z"]].values
+    nose_pts = points_3d_df[points_3d_df['marker']=='nose'][['frame', 'x', 'y', 'z']].values
     nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1]) 
     nose_y_slope, nose_y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
 
@@ -605,7 +605,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
                                 p_lin_acc, p_ang_acc, #p_lure_acc
                                ]))
 
-    # PROCESS COVARIANCE Q - how "noisy" the constant acceleration model is
+    # PROCESS COVARIANCE Q - how 'noisy' the constant acceleration model is
     qb_list = [
         5.0, 5.0, 5.0,    # head x, y, z in inertial
         10.0, 10.0, 10.0, # head phi, theta, psi in inertial
@@ -645,7 +645,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     P_pred_hist = P_est_hist.copy()
 
     t1 = time()
-    print("\nInitialization took {0:.2f} seconds\n".format(t1 - t0))
+    print('\nInitialization took {0:.2f} seconds\n'.format(t1 - t0))
 
     # ========= RUN EKF & SMOOTHER ========
 
@@ -654,7 +654,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     outliers_ignored = 0
 
     for i in range(n_frames):
-        print(f"Running frame {i+start_frame+1}\r", end='')
+        print(f'Running frame {i+start_frame+1}\r', end='')
 
         # ========== PREDICTION ==========
 
@@ -708,8 +708,8 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
         P = (np.eye(K.shape[0]) - K @ H) @ P
         P_est_hist[i] = P
 
-    print("EKF complete!")
-    print("Outliers ignored:", outliers_ignored)
+    print('EKF complete!')
+    print('Outliers ignored:', outliers_ignored)
 
     # Run Kalman Smoother
     smooth_states_est_hist = states_est_hist.copy()
@@ -719,9 +719,9 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
         smooth_states_est_hist[i] = states_est_hist[i] + A @ (smooth_states_est_hist[i+1] - states_pred_hist[i+1])
         smooth_P_est_hist[i] = P_est_hist[i] + A @ (smooth_P_est_hist[i+1] - P_pred_hist[i+1]) @ A.T
 
-    print("\nKalman Smoother complete!\n")
+    print('\nKalman Smoother complete!\n')
     t1 = time()
-    print("Optimization took {0:.2f} seconds\n".format(t1 - t0))
+    print('Optimization took {0:.2f} seconds\n'.format(t1 - t0))
 
     app.stop_logging()
 
@@ -761,18 +761,18 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     # Load Measurement Data (pixels, likelihood)
     points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
-    points_2d_df = points_2d_df[points_2d_df["frame"].between(start_frame, end_frame-1)]
+    points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame-1)]
     points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
 
     t1 = time()
-    print("Initialization took {0:.2f} seconds\n".format(t1 - t0))
+    print('Initialization took {0:.2f} seconds\n'.format(t1 - t0))
 
     points_3d_df, residuals = app.sba_points_fisheye(scene_fpath, points_2d_df)
 
     app.stop_logging()
     if plot:
-        plt.plot(residuals['before'], label="Cost before")
-        plt.plot(residuals['after'], label="Cost after")
+        plt.plot(residuals['before'], label='Cost before')
+        plt.plot(residuals['after'], label='Cost after')
         plt.legend()
         fig_fpath = os.path.join(OUT_DIR, 'sba.svg')
         plt.savefig(fig_fpath, transparent=True)
@@ -785,7 +785,7 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     positions = np.full((N, len(markers), 3), np.nan)
     for i, marker in enumerate(markers):
-        marker_pts = points_3d_df[points_3d_df["marker"]==marker][["frame", "x", "y", "z"]].values
+        marker_pts = points_3d_df[points_3d_df['marker']==marker][['frame', 'x', 'y', 'z']].values
         for frame, *pt_3d in marker_pts:
             positions[int(frame)-start_frame, i] = pt_3d
 
@@ -808,7 +808,7 @@ def tri(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
     # Load Measurement Data (pixels, likelihood)
     points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
-    points_2d_df = points_2d_df[points_2d_df["frame"].between(start_frame, end_frame-1)]
+    points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame-1)]
     points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
 
     assert len(k_arr) == points_2d_df['camera'].nunique()
@@ -827,7 +827,7 @@ def tri(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
     positions = np.full((N, len(markers), 3), np.nan)
     for i, marker in enumerate(markers):
-        marker_pts = points_3d_df[points_3d_df["marker"]==marker][["frame", "x", "y", "z"]].values
+        marker_pts = points_3d_df[points_3d_df['marker']==marker][['frame', 'x', 'y', 'z']].values
         for frame, *pt_3d in marker_pts:
             positions[int(frame)-start_frame, i] = pt_3d
 
@@ -846,7 +846,7 @@ def dlc(DATA_DIR, dlc_thresh):
 
 # ========= MAIN ========
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     parser = ArgumentParser(description='All Optimizations')
     parser.add_argument('--data_dir', type=str, help='The file path to the flick/run to be optimized')
     parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start')
@@ -855,7 +855,7 @@ if __name__ == "__main__":
     parser.add_argument('--plot', action='store_true', help='Show the plots')
     args = parser.parse_args()
     
-    # ROOT_DATA_DIR = os.path.join("..", "data")
+    # ROOT_DATA_DIR = os.path.join('..', 'data')
     DATA_DIR = os.path.normpath(args.data_dir)
     assert os.path.exists(DATA_DIR), f'Data directory not found: {DATA_DIR}'
     DLC_DIR = os.path.join(DATA_DIR, 'dlc')
@@ -891,7 +891,7 @@ if __name__ == "__main__":
     if args.plot:
         print('Plotting results...')
         data_fpaths = [
-            os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+            #os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
             os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
             os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
             os.path.join(DATA_DIR, 'fte', 'fte.pickle')

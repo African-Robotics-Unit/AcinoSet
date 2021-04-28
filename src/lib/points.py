@@ -14,7 +14,7 @@ def plot_corners(img: Array[np.uint8, ..., ..., 3], corners: Array[np.float32, .
     # note that for drawChessboardCorners to work, points must have type float32
     cv.drawChessboardCorners(img, board_shape, corners, True)
     if show_window:
-        name = f"Calibration board - columns: {board_shape[0]}, rows: {board_shape[1]}"
+        name = f'Calibration board - columns: {board_shape[0]}, rows: {board_shape[1]}'
         cv.namedWindow(name, cv.WINDOW_NORMAL)
         cv.imshow(name, img)
         cv.waitKey(0)
@@ -59,7 +59,7 @@ def find_corners_images(filepaths: List[str], board_shape: Tuple[int, int], wind
     for i, fp in enumerate(filepaths):
         img = cv.imread(fp)
         if img is None:
-            print(f"Couldn't read image: {fp}")
+            print(f'Could not read image: {fp}')
         else:
             if cam_res is None:
                 cam_res = (img.shape[1], img.shape[0])
@@ -69,9 +69,9 @@ def find_corners_images(filepaths: List[str], board_shape: Tuple[int, int], wind
             if img_corners is not None:
                 corners.append(img_corners)
                 found_filepaths.append(fp)
-                print(f"Found corners for file {i}: {fp}")
+                print(f'Found corners for file {i}: {fp}')
             else:
-                print(f"No corners found for file {i}: {fp}")
+                print(f'No corners found for file {i}: {fp}')
     return np.array(corners, dtype=np.float32).reshape((-1, *board_shape, 2)), found_filepaths, cam_res
 
 

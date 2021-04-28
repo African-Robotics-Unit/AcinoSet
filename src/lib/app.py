@@ -22,15 +22,15 @@ from .plotting import plot_calib_board, plot_optimized_states, \
 
 
 def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len, window_size=11, remove_unused_images=False):
-    print(f"Finding calibration board corners for images in {img_dir}")
-    filepaths = sorted([os.path.join(img_dir, fname) for fname in os.listdir(img_dir) if fname.endswith(".jpg") or fname.endswith(".png")])
+    print(f'Finding calibration board corners for images in {img_dir}')
+    filepaths = sorted([os.path.join(img_dir, fname) for fname in os.listdir(img_dir) if fname.endswith('.jpg') or fname.endswith('.png')])
     points, fpaths, cam_res = find_corners_images(filepaths, board_shape, window_size=window_size)
     saved_fnames = [os.path.basename(f) for f in fpaths]
     saved_points = points.tolist()
     if remove_unused_images:
         for f in filepaths:
             if os.path.basename(f) not in saved_fnames:
-                print(f"Removing {f}")
+                print(f'Removing {f}')
                 os.remove(f)
     save_points(out_fpath, saved_points, saved_fnames, board_shape, board_edge_len, cam_res)
 
@@ -41,7 +41,7 @@ def calibrate_standard_intrinsics(points_fpath, out_fpath):
     points, fnames, board_shape, board_edge_len, cam_res = load_points(points_fpath)
     obj_pts = create_board_object_pts(board_shape, board_edge_len)
     k, d, r, t = calibrate_camera(obj_pts, points, cam_res)
-    print("K:\n", k, "\nD:\n", d)
+    print('K:\n', k, '\nD:\n', d)
     save_camera(out_fpath, cam_res, k, d)
     return k, d, r, t, points
 
@@ -50,7 +50,7 @@ def calibrate_fisheye_intrinsics(points_fpath, out_fpath):
     points, fnames, board_shape, board_edge_len, cam_res = load_points(points_fpath)
     obj_pts = create_board_object_pts(board_shape, board_edge_len)
     k, d, r, t, used_points, rms = calibrate_fisheye_camera(obj_pts, points, cam_res)
-    print("K:\n", k, "\nD:\n", d)
+    print('K:\n', k, '\nD:\n', d)
     save_camera(out_fpath, cam_res, k, d)
     return k, d, r, t, used_points, rms
 
@@ -114,10 +114,10 @@ def plot_points_fisheye_undistort(points_fpath, camera_fpath):
 
 def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
     *_, scene_fpath = find_scene_file(data_dir, scene_fname, verbose=False)
-    points_dir = os.path.join(os.path.dirname(scene_fpath), "points")
+    points_dir = os.path.join(os.path.dirname(scene_fpath), 'points')
     pts_2d, frames = [], []
     if manual_points_only:
-        points_fpaths = os.path.join(points_dir, "manual_points.json")
+        points_fpaths = os.path.join(points_dir, 'manual_points.json')
         pts_2d, frames, _ = load_manual_points(points_fpaths)
         pts_2d = pts_2d.swapaxes(0, 1)
         frames = [frames]*len(pts_2d)
@@ -149,7 +149,7 @@ def plot_cheetah_reconstruction(data_fpath, scene_fname=None, **kwargs):
     label = os.path.basename(os.path.splitext(data_fpath)[0]).upper()
     with open(data_fpath, 'rb') as f:
         data = pickle.load(f)
-    positions = data["smoothed_positions"] if 'EKF' in label else data["positions"]
+    positions = data['smoothed_positions'] if 'EKF' in label else data['positions']
     _plot_cheetah_reconstruction([positions], os.path.dirname(data_fpath), scene_fname, labels=[label], **kwargs)
 
 
@@ -160,17 +160,17 @@ def plot_multiple_cheetah_reconstructions(data_fpaths, scene_fname=None, **kwarg
         label = os.path.basename(os.path.splitext(data_fpath)[0]).upper()
         with open(data_fpath, 'rb') as f:
             data = pickle.load(f)
-        positions.append(data["smoothed_positions"] if 'EKF' in label else data["positions"])
+        positions.append(data['smoothed_positions'] if 'EKF' in label else data['positions'])
         labels.append(label)
     _plot_cheetah_reconstruction(positions, os.path.dirname(data_fpath), scene_fname, labels, **kwargs)
 
 
 # ==========  SAVE FUNCS  ==========
 # All these save functions are very similar... Generalise!!
-# Also use this instead: out_fpath = os.path.join(out_dir, f"{os.path.basename(out_dir)}.pickle")
+# Also use this instead: out_fpath = os.path.join(out_dir, f'{os.path.basename(out_dir)}.pickle')
 
 def save_tri(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=True):
-    out_fpath = os.path.join(out_dir, f"tri.pickle")
+    out_fpath = os.path.join(out_dir, 'tri.pickle')
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(start_frame=start_frame))
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
 
@@ -180,7 +180,7 @@ def save_tri(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_vide
 
 
 def save_sba(positions, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=True):
-    out_fpath = os.path.join(out_dir, f"sba.pickle")
+    out_fpath = os.path.join(out_dir, 'sba.pickle')
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(start_frame=start_frame))
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
 
@@ -193,7 +193,7 @@ def save_ekf(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=
     positions = [get_3d_marker_coords(state) for state in states['x']]
     smoothed_positions = [get_3d_marker_coords(state) for state in states['smoothed_x']]
 
-    out_fpath = os.path.join(out_dir, f"ekf.pickle")
+    out_fpath = os.path.join(out_dir, 'ekf.pickle')
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(smoothed_positions=smoothed_positions, **states, start_frame=start_frame))
     save_3d_cheetah_as_2d(smoothed_positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
 
@@ -204,7 +204,7 @@ def save_ekf(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=
 def save_fte(states, out_dir, scene_fpath, start_frame, dlc_thresh, save_videos=True):
     positions = [get_3d_marker_coords(state) for state in states['x']]
 
-    out_fpath = os.path.join(out_dir, f"fte.pickle")
+    out_fpath = os.path.join(out_dir, 'fte.pickle')
     save_optimised_cheetah(positions, out_fpath, extra_data=dict(**states, start_frame=start_frame))
     save_3d_cheetah_as_2d(positions, out_dir, scene_fpath, get_markers(), project_points_fisheye, start_frame)
 
@@ -237,7 +237,7 @@ def get_vid_info(path_dir, vid_extension='mp4'):
 
     orig_path = path_dir
     if not os.path.isfile(path_dir):
-        files = sorted(glob(os.path.join(path_dir, f"*.{vid_extension}"))) # assume path is a dir that holds video file(s)
+        files = sorted(glob(os.path.join(path_dir, f'*.{vid_extension}'))) # assume path is a dir that holds video file(s)
         if files:
             path_dir = files[0]
         else:
@@ -248,7 +248,7 @@ def get_vid_info(path_dir, vid_extension='mp4'):
     return (vid.width(), vid.height()), vid.fps(), vid.frame_count(), vid.codec()
 
 
-def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputframerate=None, out_dir=None, draw_skeleton=False, pcutoff=0.5, dotsize=6, colormap='jet', skeleton_color='white'):
+def create_labeled_videos(video_fpaths, videotype='mp4', codec='mp4v', outputframerate=None, out_dir=None, draw_skeleton=False, pcutoff=0.5, dotsize=6, colormap='jet', skeleton_color='white'):
     from functools import partial
     from multiprocessing import Pool
 
@@ -258,7 +258,7 @@ def create_labeled_videos(video_fpaths, videotype="mp4", codec="mp4v", outputfra
     bodyparts2connect = get_skeleton() if draw_skeleton else None
 
     if not video_fpaths:
-        print("No videos were found. Please check your paths\n")
+        print('No videos were found. Please check your paths\n')
         return
 
     if out_dir is None:

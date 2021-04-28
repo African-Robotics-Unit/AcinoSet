@@ -4,7 +4,7 @@ import sympy as sp
 
 
 def get_markers():
-    return ['nose', 'l_eye', 'r_eye', 'neck_base', 
+    return ['nose', 'r_eye', 'l_eye', 'neck_base',
             'spine', 'tail_base', 'tail1', 'tail2',
             'r_shoulder', 'r_front_knee', 'r_front_ankle', #'r_front_paw',
             'l_shoulder', 'l_front_knee', 'l_front_ankle', #'l_front_paw',
@@ -38,15 +38,16 @@ def get_pose_params():
               'theta_12', 'theta_13',      # r_hip, r_back_knee
 #               'x_l', 'y_l', 'z_l'          # lure position in inertial
              ] # exludes paws & lure for now!
-    return dict(zip(states ,range(len(states))))
+    return dict(zip(states, range(len(states))))
 
 
 def get_3d_marker_coords(x):
     """Returns either a numpy array or a sympy Matrix of the 3D marker coordinates (shape Nx3) for a given state vector x.
     """
-    func = sp.Matrix if isinstance(x[0], sp.Expr) else np.array
     idx = get_pose_params()
-    
+
+    func = sp.Matrix if isinstance(x[0], sp.Expr) else np.array
+
     # rotations
     RI_0  = rot_z(x[idx['psi_0']]) @ rot_x(x[idx['phi_0']]) @ rot_y(x[idx['theta_0']])         # head
     R0_I  = RI_0.T
@@ -77,8 +78,9 @@ def get_3d_marker_coords(x):
     RI_13 = rot_y(x[idx['theta_13']]) @ RI_12                                                  # r_back_knee
     R13_I = RI_13.T
 
+
     # positions
-    p_head          = func([x[idx['x_0']], x[idx['y_0']],x[idx['z_0']]])
+    p_head          = func([x[idx['x_0']], x[idx['y_0']], x[idx['z_0']]])
 
     p_l_eye         = p_head         + R0_I  @ func([0, 0.03, 0])
     p_r_eye         = p_head         + R0_I  @ func([0, -0.03, 0])
@@ -109,13 +111,13 @@ def get_3d_marker_coords(x):
 
 #     p_lure = func([x[idx['x_l']], x[idx['y_l']], x[idx['z_l']]])
 
-    return func([p_l_eye.T, p_r_eye.T, p_nose.T,
+    return func([p_nose.T, p_r_eye.T, p_l_eye.T,
                  p_neck_base.T, p_spine.T,
                  p_tail_base.T, p_tail_mid.T, p_tail_tip.T,
-                 p_l_shoulder.T, p_l_front_knee.T, p_l_front_ankle.T,
                  p_r_shoulder.T, p_r_front_knee.T, p_r_front_ankle.T,
-                 p_l_hip.T, p_l_back_knee.T, p_l_back_ankle.T,
+                 p_l_shoulder.T, p_l_front_knee.T, p_l_front_ankle.T,
                  p_r_hip.T, p_r_back_knee.T, p_r_back_ankle.T,
+                 p_l_hip.T, p_l_back_knee.T, p_l_back_ankle.T,
 #                  p_lure.T
                 ])
 

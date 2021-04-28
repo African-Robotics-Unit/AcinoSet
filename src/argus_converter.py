@@ -32,7 +32,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     cam_res = [args.cam_res_w, args.cam_res_h]
     # load input data
     argus_point_fpath = glob(os.path.join(args.data_dir, '*-xypts.csv'))[0]
@@ -78,6 +78,6 @@ if __name__ == "__main__":
 
     # output converted data
     output_fpath = os.path.join(args.data_dir, 'manual_points.json')
-    with open(output_fpath, "w") as write_file:
+    with open(output_fpath, 'w') as write_file:
         json.dump(result, write_file)
     print(f'Success to output into {output_fpath}')

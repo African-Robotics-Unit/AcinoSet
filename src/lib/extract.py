@@ -33,13 +33,13 @@ def get_frames(vid_fpath, frame_output_dir):
 
             curr_frame = cap.get(cv2.CAP_PROP_POS_FRAMES)
             if ret:
-                draw_text(frame, f"frame {int(curr_frame)}")
+                draw_text(frame, f'frame {int(curr_frame)}')
                 cv2.imshow(winname, frame)
             else:
                 break
 
             key = cv2.waitKey(10) & 0xFF
-            if key == ord("."):
+            if key == ord('.'):
                 #cap.set(cv2.CAP_PROP_POS_FRAMES, curr_frame+48) # skip 50 frames
                 go_next = True
             elif key == ord(','):
@@ -53,7 +53,7 @@ def get_frames(vid_fpath, frame_output_dir):
         cap.release()
         cv2.destroyAllWindows()
     else:
-        print("Couldn't open", vid_fpath)
+        print('Could not open', vid_fpath)
         
         
 def manual_label(vid_fpaths, out_fpath):
@@ -73,7 +73,7 @@ class VideoLabelSession(object):
             self.vid_caps.append(cv2.VideoCapture(p))
             if self.vid_caps[i].isOpened():
                 self.vid_names.append(os.path.basename(p))
-                print("Successfully opened", self.vid_names[i])
+                print('Successfully opened', self.vid_names[i])
                 if i == 0:
                     self.frame_count = int(self.vid_caps[i].get(cv2.CAP_PROP_FRAME_COUNT))
                     self.frame_width = int(self.vid_caps[i].get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -83,14 +83,14 @@ class VideoLabelSession(object):
                     assert self.frame_width == int(self.vid_caps[i].get(cv2.CAP_PROP_FRAME_WIDTH))
                     assert self.frame_height == int(self.vid_caps[i].get(cv2.CAP_PROP_FRAME_HEIGHT))
             else:
-                print("Couldn't open", p)
+                print('Could not open', p)
         self.frame_position = 0
         self.frame_circles = np.empty((self.n_vids, 2))
         self.frame_circles[:, :] = np.nan
         if os.path.isfile(out_fpath):
             with open(self.out_fpath, 'r') as f:
-                self.frame_circles_saved = np.array(json.load(f)["points"])
-                print("Points loaded.")
+                self.frame_circles_saved = np.array(json.load(f)['points'])
+                print('Points loaded.')
         else:
             self.frame_circles_saved = None
         self.frames = np.zeros((self.n_vids, self.frame_width, self.frame_height, 3), dtype=np.uint8)
@@ -114,7 +114,7 @@ class VideoLabelSession(object):
             if ret:
                 self.frame_imgs[i] = img
             else:
-                print("Couldn't read frame", self.frame_position, "from", self.vid_names[i])
+                print('Could not read frame', self.frame_position, 'from', self.vid_names[i])
 
     def render_frames(self):
         self.frames = self.frame_imgs.copy()
@@ -154,7 +154,7 @@ class VideoLabelSession(object):
                 self.frame_circles[:, :] = np.nan
                 with open(self.out_fpath, 'w') as f:
                     json.dump(dict(points=self.frame_circles_saved.tolist()), f)
-                    print("Points saved.")
+                    print('Points saved.')
 
             elif k == ord(','):
                 if self.frame_position > 0:
@@ -170,7 +170,7 @@ class VideoLabelSession(object):
                 self.frame_circles[:, :] = np.nan
 
             elif k == ord('g'):
-                self.frame_position = int(input(f"Enter a frame to go to between 0 and {self.frame_count}: "))
+                self.frame_position = int(input(f'Enter a frame to go to between 0 and {self.frame_count}: '))
                 if self.frame_position < 0:
                     self.frame_position = 0
                 if self.frame_position > self.frame_count:
