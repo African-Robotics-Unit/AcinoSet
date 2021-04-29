@@ -21,9 +21,7 @@ plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
     # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
     # we use a redescending cost to stop outliers affecting the optimisation negatively
-    redesc_a = 3
-    redesc_b = 10
-    redesc_c = 20
+    redesc_a, redesc_b, redesc_c = 3, 10, 20
 
     # plot
     r_x = np.arange(-20, 20, 1e-1)
@@ -44,14 +42,14 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     OUT_DIR = os.path.join(DATA_DIR, 'fte')
     os.makedirs(OUT_DIR, exist_ok=True)
-    
+
     app.start_logging(os.path.join(OUT_DIR, 'fte.log'))
 
     # load video info
     res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
-        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
+        json.dump(dict(start_frame=start_frame+1, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     # symbolic vars
     idx       = misc.get_pose_params()
@@ -78,7 +76,7 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         a    = x_2d/z_2d
         b    = y_2d/z_2d
         # fisheye params
-        r    = (a**2 + b**2 +1e-12)**0.5
+        r    = (a**2 + b**2 + 1e-12)**0.5
         th   = pyo.atan(r)
         # distortion
         th_D = th * (1 + D[0]*th**2 + D[1]*th**4 + D[2]*th**6 + D[3]*th**8)
@@ -96,6 +94,7 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         v = pt3d_to_2d(x, y, z, K, D, R, t)[1]
         return v
 
+    proj_funcs = [pt3d_to_x2d, pt3d_to_y2d]
 
     # ========= IMPORT CAMERA & SCENE PARAMS ========
 
@@ -103,13 +102,13 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     D_arr = D_arr.reshape((-1,4))
     assert res == cam_res
 
-    # ========= IMPORT DATA ========
+    # ========= DEFINE CONSTANTS ========
 
     markers = misc.get_markers()
 
     R = 5 # measurement standard deviation
 
-    Q = [ # model parameters variance
+    Q = np.array([
         4, 7, 5,    # head position in inertial
         13, 9, 26,  # head rotation in inertial
         32, 18, 12, # neck
@@ -121,25 +120,7 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         194, 164,   # r_shoulder, r_front_knee
         295, 243,   # l_hip, l_back_knee
         334, 149    # r_hip, r_back_knee
-    ]
-    Q = np.array(Q, dtype=np.float64)**2
-
-    def get_meas_from_df(n, c, l, d):
-        n_mask = points_2d_df['frame']  == n-1
-        l_mask = points_2d_df['marker'] == markers[l-1]
-        c_mask = points_2d_df['camera'] == c-1
-        d_idx  = {1:'x', 2:'y'}
-        val    = points_2d_df[n_mask & l_mask & c_mask]
-        return val[d_idx[d]].values[0]
-
-    def get_likelihood_from_df(n, c, l):
-        n_mask = points_2d_df['frame']  == n-1
-        l_mask = points_2d_df['marker'] == markers[l-1]
-        c_mask = points_2d_df['camera'] == c-1
-        val    = points_2d_df[n_mask & l_mask & c_mask]
-        return val['likelihood'].values[0]
-
-    proj_funcs = [pt3d_to_x2d, pt3d_to_y2d]
+    ], dtype=np.float64)**2  # model parameters variance
 
     #===================================================
     #                   Load in data
@@ -182,18 +163,29 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     # ======= WEIGHTS =======
 
+    # functions below are needed due to pyomo issue, see https://github.com/Pyomo/pyomo/issues/611
+    # When issue is solved, remove init_model_weights and change initialize = init_model_weights to initialize = 1/Q
+
     def init_meas_weights(model, n, c, l):
-        likelihood = get_likelihood_from_df(n+start_frame, c, l)
-        if likelihood > dlc_thresh:
-            return 1/R
-        else:
-            return 0
+        # get likelihood from df
+        n_mask = points_2d_df['frame']  == n+start_frame-1
+        l_mask = points_2d_df['marker'] == markers[l-1]
+        c_mask = points_2d_df['camera'] == c-1
+        val    = points_2d_df[n_mask & l_mask & c_mask]
+        likelihood =  val['likelihood'].values[0]
+        return (likelihood > dlc_thresh)/R # branchless
 
     def init_model_weights(m, p):
         return 1/Q[p-1]
 
     def init_measurements_df(m, n, c, l, d2):
-        return get_meas_from_df(n+start_frame, c, l, d2)
+        # get measurements from df
+        n_mask = points_2d_df['frame']  == n+start_frame-1
+        l_mask = points_2d_df['marker'] == markers[l-1]
+        c_mask = points_2d_df['camera'] == c-1
+        d_idx  = {1:'x', 2:'y'}
+        val    = points_2d_df[n_mask & l_mask & c_mask]
+        return val[d_idx[d2]].values[0]
 
     m.meas_err_weight  = pyo.Param(m.N, m.C, m.L, initialize = init_meas_weights, mutable=True)
     m.model_err_weight = pyo.Param(m.P, initialize = init_model_weights)
@@ -365,22 +357,13 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     print('- Numerical integration')
 
     def backwards_euler_pos(m,n,p):
-        if n > 1:
-            return m.x[n,p] == m.x[n-1,p] + m.Ts*m.dx[n,p]
-        else:
-            return pyo.Constraint.Skip
+        return m.x[n,p] == m.x[n-1,p] + m.Ts*m.dx[n,p] if n > 1 else pyo.Constraint.Skip
 
     def backwards_euler_vel(m,n,p):
-        if n > 1:
-            return m.dx[n,p] == m.dx[n-1,p] + m.Ts*m.ddx[n,p]
-        else:
-            return pyo.Constraint.Skip
+        return m.dx[n,p] == m.dx[n-1,p] + m.Ts*m.ddx[n,p] if n > 1 else pyo.Constraint.Skip
 
     def constant_acc(m, n, p):
-        if n > 1:
-            return m.ddx[n,p] == m.ddx[n-1,p] + m.slack_model[n,p]
-        else:
-            return pyo.Constraint.Skip
+        return m.ddx[n,p] == m.ddx[n-1,p] + m.slack_model[n,p] if n > 1 else pyo.Constraint.Skip
 
     m.integrate_p  = pyo.Constraint(m.N, m.P, rule = backwards_euler_pos)
     m.integrate_v  = pyo.Constraint(m.N, m.P, rule = backwards_euler_vel)
@@ -483,7 +466,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     sT = 1.0/fps # timestep
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
-        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
+        json.dump(dict(start_frame=start_frame+1, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     # ========= FUNCTION DEFINITINOS ========
 
@@ -752,7 +735,7 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     N = end_frame-start_frame
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
-        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
+        json.dump(dict(start_frame=start_frame+1, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     *_, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
@@ -799,7 +782,7 @@ def tri(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     N = end_frame-start_frame
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
-        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
+        json.dump(dict(start_frame=start_frame+1, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
 
