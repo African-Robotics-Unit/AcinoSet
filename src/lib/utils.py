@@ -187,7 +187,7 @@ def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project
         assert len(k_arr)==len(video_fpaths)
 
         xyz_labels = ['x', 'y', 'likelihood'] # same format as DLC
-        pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=["bodyparts", "coords"])
+        pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=['bodyparts', 'coords'])
 
         positions_3d = np.array(positions_3d)
         n_frames = len(positions_3d)
@@ -207,13 +207,13 @@ def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project
 
             df = pd.DataFrame(data.reshape((n_frames, -1)), columns=pdindex, index=range(start_frame, start_frame+n_frames))
             if save_as_csv:
-                df.to_csv(os.path.splitext(fpath)[0] + ".csv")
-            df.to_hdf(fpath, f"{out_fname}_df", format="table", mode="w")
+                df.to_csv(os.path.splitext(fpath)[0] + '.csv')
+            df.to_hdf(fpath, f'{out_fname}_df', format='table', mode='w')
 
         fpath = fpath.replace(cam_name, 'cam*')
         print('Saved', fpath)
         if save_as_csv:
-            print('Saved', os.path.splitext(fpath)[0] + ".csv")
+            print('Saved', os.path.splitext(fpath)[0] + '.csv')
         print()
     else:
         print('Could not save 3D cheetah to 2D - No videos were found in', out_dir, 'or', os.path.dirname(out_dir))
@@ -257,7 +257,7 @@ def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, tri
         d1 = points_2d_df[points_2d_df['camera']==cam_b]
         intersection_df = d0.merge(d1, how='inner', on=['frame','marker'], suffixes=('_a', '_b'))
         if intersection_df.shape[0] > 0:
-            print(f"Found {intersection_df.shape[0]} pairwise points between camera {cam_a} and {cam_b}")
+            print(f'Found {intersection_df.shape[0]} pairwise points between camera {cam_a} and {cam_b}')
             cam_a_points = np.array(intersection_df[['x_a','y_a']], dtype=np.float).reshape((-1,1,2))
             cam_b_points = np.array(intersection_df[['x_b','y_b']], dtype=np.float).reshape((-1,1,2))
             points_3d = triangulate_func(cam_a_points, cam_b_points,
@@ -268,7 +268,7 @@ def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, tri
             intersection_df['z'] = points_3d[:, 2]
             df_pairs = pd.concat([df_pairs, intersection_df], ignore_index=True, join='outer', sort=False)
         else:
-            print(f"No pairwise points between camera {cam_a} and {cam_b}")
+            print(f'No pairwise points between camera {cam_a} and {cam_b}')
 
     print()
     points_3d_df = df_pairs[['frame', 'marker', 'x','y','z']].groupby(['frame','marker']).mean().reset_index()

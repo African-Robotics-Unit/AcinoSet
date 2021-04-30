@@ -107,7 +107,7 @@ class Animation:
         if self.app == None:
             self.app = QApplication([])
         
-        self.centered = False if "Scene" in title else centered
+        self.centered = False if 'Scene' in title else centered
         self.dark_mode = dark_mode
         self.screen_res = self.app.desktop().screenGeometry()
         self.screen_res = np.array([self.screen_res.width(), self.screen_res.height()])
@@ -177,7 +177,7 @@ class Animation:
 
 class Scene(Animation):
     def __init__(self, scene_fpath, **kwargs):
-        Animation.__init__(self, "Scene Reconstruction", scene_fpath, **kwargs)
+        Animation.__init__(self, 'Scene Reconstruction', scene_fpath, **kwargs)
         self.layout.addWidget(self.view, 0, 0, 1, 1)
         
     def plot_calib_board(self, r, t, board_shape, board_edge_len):
@@ -196,7 +196,7 @@ class Scene(Animation):
 
 class Cheetah(Animation):
     def __init__(self, multiple_reconstructions, scene_fpath, labels, project_func, hide_lure=False, reprojections=True, **kwargs):
-        Animation.__init__(self, "Cheetah Reconstruction", scene_fpath, **kwargs)
+        Animation.__init__(self, 'Cheetah Reconstruction', scene_fpath, **kwargs)
         self.layout.addWidget(self.view, 0, 0, self.n_cams, 1)
         
         # To add a legend, investigate https://groups.google.com/g/pyqtgraph/c/PfJvmjIF3Dg/m/QVG9xUGk-zgJ
@@ -249,7 +249,7 @@ class Cheetah(Animation):
         if self.centered:
             self.reprojections = False
             if reprojections:
-                print("Reprojections are not permitted in centered mode")
+                print('Reprojections are not permitted in centered mode')
         else:
             self.reprojections = reprojections
 
@@ -266,7 +266,7 @@ class Cheetah(Animation):
                 
                 cam_i_lines, cam_data = [], []
                 for j in range(self.n_reconstructions):
-                    cam_data.append(pg.PlotDataItem(connect="pairs", pen=pg.mkPen(255*np.array(colours[j]))))
+                    cam_data.append(pg.PlotDataItem(connect='pairs', pen=pg.mkPen(255*np.array(colours[j]))))
                     cam_w[i].addItem(cam_data[j])
                     cam_params = [self.k_arr[i], self.d_arr[i], self.r_arr[i], self.t_arr[i]]
                     cam_i_lines.append(project_func(self.lines_frames[j], *cam_params).reshape((self.n_frames, -1, 2)))
@@ -314,8 +314,8 @@ def plot_extrinsics(scene_fpath, pts_2d, fnames, triangulate_func, manual_points
             )
             scene.plot_points(pts_3d, color=colors[cam]+[1]) # must have transparency channel
         except:
-            msg = "Could not triangulate points" if len(img_pts_1) else "No points exist"
-            print(msg, f"for cam pair with indices {[a,b]}")
+            msg = 'Could not triangulate points' if len(img_pts_1) else 'No points exist'
+            print(msg, f'for cam pair with indices {[a,b]}')
     
     scene.show()
 

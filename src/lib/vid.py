@@ -174,8 +174,8 @@ def CreateVideo(clip, df, pcutoff, bodyparts2plot, bodyparts2connect, dotsize, c
         # recode the bodyparts2connect into indices for df_x and df_y for speed
         bpts2connect = get_segment_indices(bodyparts2connect, all_bpts)
 
-    print('\nDuration of video: {} s, recorded with {} fps!'.format(round(clip.frame_count() / clip.fps(), 2), round(clip.fps(), 2)),
-          'Total frames: {} with frame dimensions: {} x {}'.format(clip.frame_count(), clip.width(), clip.height()),
+    print(f'\nDuration of video: {round(clip.frame_count() / clip.fps(), 2)} s, recorded with {round(clip.fps(), 2)} fps!',
+          f'Total frames: {clip.frame_count()} with frame dimensions: {clip.width()} x {clip.height()}',
           'Generating frames and creating video...', sep='\n')
 
     df_x, df_y, df_likelihood = df.values.reshape((df.index.size, -1, 3)).T
@@ -190,7 +190,7 @@ def CreateVideo(clip, df, pcutoff, bodyparts2plot, bodyparts2connect, dotsize, c
     colors = (C[:, :3] * 255).astype(np.uint8).tolist()
 
     with np.errstate(invalid='ignore'):
-        for frame_idx in trange(clip.frame_count()):
+        for frame_idx in trange(clip.frame_count(), unit=' f'):
             image = clip.load_frame()
             try:
                 idx = df.index.get_loc(frame_idx)
@@ -222,7 +222,7 @@ def proc_video(out_dir, bodyparts, codec, bodyparts2connect, outputframerate, dr
     start_path = os.getcwd()
     os.chdir(out_dir)
 
-    print('Loading {} and data.'.format(vname))
+    print(f'Loading {vname} and data.')
     try:
         filepath = glob(vname + '*.h5')[0]
         videooutname = filepath.replace('.h5', '.mp4')
