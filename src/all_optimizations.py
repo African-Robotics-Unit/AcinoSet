@@ -15,7 +15,7 @@ from pyomo.opt import SolverFactory
 from lib import misc, utils, app
 from lib.calib import project_points_fisheye, triangulate_points_fisheye
 
-plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
+plt.style.use(os.path.join('/configs', 'mplstyle.yaml'))
 
 
 def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
@@ -44,7 +44,7 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     OUT_DIR = os.path.join(DATA_DIR, 'fte')
     os.makedirs(OUT_DIR, exist_ok=True)
-    
+
     app.start_logging(os.path.join(OUT_DIR, 'fte.log'))
 
     # load video info
@@ -430,9 +430,9 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     print('\nOptimization took {0:.2f} seconds\n'.format(t1 - t0))
 
     app.stop_logging()
-    
+
     # ========= SAVE FTE RESULTS ========
-    
+
     x, dx, ddx = [], [], []
     for n in m.N:
         x.append([m.x[n, p].value for p in m.P])
@@ -560,7 +560,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
     # try:
     #     lure_pts = points_3d_df[points_3d_df['marker']=='lure'][['frame', 'x', 'y', 'z']].values
-    #     lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1]) 
+    #     lure_x_slope, lure_x_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,1])
     #     lure_y_slope, lure_y_intercept, *_ = linregress(lure_pts[:,0], lure_pts[:,2])
 
     #     lure_x_est = start_frame*lure_x_slope + lure_x_intercept # initial lure x
@@ -574,7 +574,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
 
     nose_pts = points_3d_df[points_3d_df['marker']=='nose'][['frame', 'x', 'y', 'z']].values
-    nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1]) 
+    nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
     nose_y_slope, nose_y_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,2])
 
     nose_x_est = start_frame*nose_x_slope + nose_x_intercept # initial nose x
@@ -745,7 +745,7 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     OUT_DIR = os.path.join(DATA_DIR, 'sba')
     os.makedirs(OUT_DIR, exist_ok=True)
-    
+
     app.start_logging(os.path.join(OUT_DIR, 'sba.log'))
 
     # load video info
@@ -837,10 +837,10 @@ def tri(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 def dlc(DATA_DIR, dlc_thresh):
     video_fpaths = sorted(glob(os.path.join(DATA_DIR, 'cam[1-9].mp4'))) # original vids should be in the parent dir
     OUT_DIR = os.path.join(DATA_DIR, 'dlc')
-    
+
     with open(os.path.join(OUT_DIR, 'video_params.json'), 'w') as f:
         json.dump(dict(dlc_thresh=dlc_thresh), f)
-    
+
     app.create_labeled_videos(video_fpaths, out_dir=OUT_DIR, draw_skeleton=True, pcutoff=dlc_thresh)
 
 
@@ -854,7 +854,7 @@ if __name__ == '__main__':
     parser.add_argument('--dlc_thresh', type=float, default=0.8, help='The likelihood of the dlc points below which will be excluded from the optimization')
     parser.add_argument('--plot', action='store_true', help='Show the plots')
     args = parser.parse_args()
-    
+
     # ROOT_DATA_DIR = os.path.join('..', 'data')
     DATA_DIR = os.path.normpath(args.data_dir)
     assert os.path.exists(DATA_DIR), f'Data directory not found: {DATA_DIR}'
@@ -870,7 +870,7 @@ if __name__ == '__main__':
 
     assert 0 < args.start_frame < tot_frames, f'start_frame must be strictly between 0 and {tot_frames}'
     assert 0 <= args.dlc_thresh <= 1, 'dlc_thresh must be from 0 to 1'
-    
+
     args.start_frame -= 1 # 0 based indexing
 
     print('========== DLC ==========\n')

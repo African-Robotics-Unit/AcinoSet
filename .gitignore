@@ -60,3 +60,5 @@ Temporary Items
 # End of https://www.toptal.com/developers/gitignore/api/macos
 
 **.sh
+
+src/all_flick.sh
