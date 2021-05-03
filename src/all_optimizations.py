@@ -444,7 +444,7 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     app.save_fte(dict(x=x, dx=dx, ddx=ddx), OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
-    fig_fpath= os.path.join(OUT_DIR, 'fte.svg')
+    fig_fpath = os.path.join(OUT_DIR, 'fte.svg')
     app.plot_cheetah_states(x, out_fpath=fig_fpath)
 
 
@@ -783,10 +783,9 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         plt.show(block=False)
 
     # ========= SAVE SBA RESULTS ========
-
     markers = misc.get_markers()
-
     positions = np.full((N, len(markers), 3), np.nan)
+
     for i, marker in enumerate(markers):
         marker_pts = points_3d_df[points_3d_df['marker']==marker][['frame', 'x', 'y', 'z']].values
         for frame, *pt_3d in marker_pts:
@@ -795,44 +794,29 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     app.save_sba(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
 
-def tri(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
+def tri(DATA_DIR, points_2d_df, start_frame, end_frame, dlc_thresh, scene_fpath):
     OUT_DIR = os.path.join(DATA_DIR, 'tri')
     os.makedirs(OUT_DIR, exist_ok=True)
-
-    N = end_frame-start_frame
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
         json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
-    k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
-
-    dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
-    assert n_cams == len(dlc_points_fpaths)
-
-    # Load Measurement Data (pixels, likelihood)
-    points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
-    points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame-1)]
-    points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
-
-    assert len(k_arr) == points_2d_df['camera'].nunique()
-
+    # triangulation
     points_3d_df = utils.get_pairwise_3d_points_from_df(
         points_2d_df,
         k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
         triangulate_points_fisheye
     )
-
     points_3d_df['point_index'] = points_3d_df.index
 
     # ========= SAVE TRIANGULATION RESULTS ========
-
     markers = misc.get_markers()
+    positions = np.full((end_frame - start_frame + 1, len(markers), 3), np.nan)
 
-    positions = np.full((N, len(markers), 3), np.nan)
     for i, marker in enumerate(markers):
         marker_pts = points_3d_df[points_3d_df['marker']==marker][['frame', 'x', 'y', 'z']].values
         for frame, *pt_3d in marker_pts:
-            positions[int(frame)-start_frame, i] = pt_3d
+            positions[int(frame) - start_frame, i] = pt_3d
 
     app.save_tri(positions, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
@@ -885,7 +869,7 @@ if __name__ == '__main__':
         # Automatically set start and end frame
         # defining the first and end frame as detecting all the markers on any of cameras simultaneously
         points_2d_df = points_2d_df.query(f'likelihood > {args.dlc_thresh}')    # ignore points with low likelihood
-        target_markers = get_markers()
+        target_markers = misc.get_markers()
         markers_condition = ' or '.join([f'marker=="{ref}"' for ref in target_markers])
         num_marker = lambda i: len(points_2d_df.query(f'frame == {i} and ({markers_condition})')['marker'].unique())
 
@@ -901,6 +885,7 @@ if __name__ == '__main__':
                 break
         if start_frame is None or end_frame is None:
             raise('Setting frames failed. Please define start and end frames manually.')
+
         points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
     else:
         # User-defined frames
@@ -908,29 +893,20 @@ if __name__ == '__main__':
         end_frame = args.end_frame % num_frames + 1 if args.end_frame == -1 else args.end_frame
         points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
         points_2d_df = points_2d_df[points_2d_df['likelihood'] > args.dlc_thresh]    # ignore points with low likelihood
+    assert len(k_arr) == points_2d_df['camera'].nunique()
 
-    with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
-        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
-
-    # calculate the 3D points with triangulae
-    points_3d_df = utils.get_pairwise_3d_points_from_df(
-        points_2d_df,
-        k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
-        triangulate_points_fisheye
-    )
-
-    print('========== Triangulation ==========\n')
-    tri(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    plt.close('all')
+    # print('========== Triangulation ==========\n')
+    # tri(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
+    # plt.close('all')
     print('========== SBA ==========\n')
     sba(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh, args.plot)
     plt.close('all')
-    print('========== EKF ==========\n')
-    ekf(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    plt.close('all')
-    print('========== FTE ==========\n')
-    fte(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh, args.plot)
-    plt.close('all')
+    # print('========== EKF ==========\n')
+    # ekf(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
+    # plt.close('all')
+    # print('========== FTE ==========\n')
+    # fte(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh, args.plot)
+    # plt.close('all')
 
     if args.plot:
         print('Plotting results...')
