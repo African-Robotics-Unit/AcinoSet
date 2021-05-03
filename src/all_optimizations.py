@@ -1,7 +1,5 @@
-from argparse import ArgumentParser
-
-# imports from notebooks
 import os
+import sys
 import json
 import numpy as np
 import sympy as sp
@@ -10,10 +8,15 @@ import pyomo.environ as pyo
 import matplotlib.pyplot as plt
 from glob import glob
 from time import time
+from pprint import pprint
+from tqdm import tqdm
+from argparse import ArgumentParser
 from scipy.stats import linregress
 from pyomo.opt import SolverFactory
+
 from lib import misc, utils, app
 from lib.calib import project_points_fisheye, triangulate_points_fisheye
+from lib.misc import get_markers
 
 plt.style.use(os.path.join('/configs', 'mplstyle.yaml'))
 
@@ -848,33 +851,74 @@ def dlc(DATA_DIR, dlc_thresh):
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='All Optimizations')
-    parser.add_argument('--data_dir', type=str, help='The file path to the flick/run to be optimized')
-    parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start')
-    parser.add_argument('--end_frame', type=int, default=-1, help='The frame at which the optimized reconstruction will end')
-    parser.add_argument('--dlc_thresh', type=float, default=0.8, help='The likelihood of the dlc points below which will be excluded from the optimization')
-    parser.add_argument('--plot', action='store_true', help='Show the plots')
+    parser.add_argument('--data_dir', type=str, help='The file path to the flick/run to be optimized.')
+    parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start.')
+    parser.add_argument('--end_frame', type=int, default=-1, help='The frame at which the optimized reconstruction will end. If it is -1, start_frame and end_frame are automatically set.')
+    parser.add_argument('--dlc_thresh', type=float, default=0.8, help='The likelihood of the dlc points below which will be excluded from the optimization.')
+    parser.add_argument('--plot', action='store_true', help='Show the plots.')
     args = parser.parse_args()
 
-    # ROOT_DATA_DIR = os.path.join('..', 'data')
     DATA_DIR = os.path.normpath(args.data_dir)
     assert os.path.exists(DATA_DIR), f'Data directory not found: {DATA_DIR}'
     DLC_DIR = os.path.join(DATA_DIR, 'dlc')
     assert os.path.exists(DLC_DIR), f'DLC directory not found: {DLC_DIR}'
 
-    # load DLC info
-    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-    assert args.end_frame <= tot_frames, f'end_frame must be less than or equal to {tot_frames}'
-    assert args.end_frame != 0, f'end_frame cannot be 0'
-    if args.end_frame < 0:
-        args.end_frame = args.end_frame % tot_frames + 1 # cyclic
-
-    assert 0 < args.start_frame < tot_frames, f'start_frame must be strictly between 0 and {tot_frames}'
+    # load video info
+    res, fps, num_frames, _ = app.get_vid_info(DATA_DIR)    # path to the directory having original videos
+    assert 0 < args.start_frame < num_frames, f'start_frame must be strictly between 0 and {num_frames}'
+    assert 0 != args.end_frame <= num_frames, f'end_frame must be less than or equal to {num_frames}'
     assert 0 <= args.dlc_thresh <= 1, 'dlc_thresh must be from 0 to 1'
 
-    args.start_frame -= 1 # 0 based indexing
+    # # generate labelled videos with DLC measurement data
+    # print('========== DLC ==========\n')
+    # dlc(DATA_DIR, args.dlc_thresh)
 
-    print('========== DLC ==========\n')
-    dlc(DATA_DIR, args.dlc_thresh)
+    # load scene data
+    k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
+    # load DLC data
+    dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
+    assert n_cams == len(dlc_points_fpaths)
+
+    # load measurement dataframe (pixels, likelihood)
+    points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
+    if args.end_frame == -1:
+        # Automatically set start and end frame
+        # defining the first and end frame as detecting all the markers on any of cameras simultaneously
+        points_2d_df = points_2d_df.query(f'likelihood > {args.dlc_thresh}')    # ignore points with low likelihood
+        target_markers = get_markers()
+        markers_condition = ' or '.join([f'marker=="{ref}"' for ref in target_markers])
+        num_marker = lambda i: len(points_2d_df.query(f'frame == {i} and ({markers_condition})')['marker'].unique())
+
+        start_frame, end_frame = None, None
+        max_idx = points_2d_df['frame'].max() + 1
+        for i in range(max_idx):
+            if num_marker(i) == len(target_markers):
+                start_frame = i
+                break
+        for i in range(max_idx, 0, -1):
+            if num_marker(i) == len(target_markers):
+                end_frame = i
+                break
+        if start_frame is None or end_frame is None:
+            raise('Setting frames failed. Please define start and end frames manually.')
+        points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
+    else:
+        # User-defined frames
+        start_frame = args.start_frame - 1  # 0 based indexing
+        end_frame = args.end_frame % num_frames + 1 if args.end_frame == -1 else args.end_frame
+        points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
+        points_2d_df = points_2d_df[points_2d_df['likelihood'] > args.dlc_thresh]    # ignore points with low likelihood
+
+    with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
+        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
+
+    # calculate the 3D points with triangulae
+    points_3d_df = utils.get_pairwise_3d_points_from_df(
+        points_2d_df,
+        k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
+        triangulate_points_fisheye
+    )
+
     print('========== Triangulation ==========\n')
     tri(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
     plt.close('all')

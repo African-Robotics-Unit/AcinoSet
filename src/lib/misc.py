@@ -4,24 +4,26 @@ import sympy as sp
 
 
 def get_markers():
-    return ['nose', 'r_eye', 'l_eye', 'neck_base',
-            'spine', 'tail_base', 'tail1', 'tail2',
-            'r_shoulder', 'r_front_knee', 'r_front_ankle', #'r_front_paw',
-            'l_shoulder', 'l_front_knee', 'l_front_ankle', #'l_front_paw',
-            'r_hip', 'r_back_knee', 'r_back_ankle', #'r_back_paw',
-            'l_hip', 'l_back_knee', 'l_back_ankle', #'l_back_paw',
-#             'lure'
-           ] # excludes paws & lure for now!
+    return [
+        'nose', 'r_eye', 'l_eye', 'neck_base',
+        'spine', 'tail_base', 'tail1', 'tail2',
+        'r_shoulder', 'r_front_knee', 'r_front_ankle', #'r_front_paw',
+        'l_shoulder', 'l_front_knee', 'l_front_ankle', #'l_front_paw',
+        'r_hip', 'r_back_knee', 'r_back_ankle', #'r_back_paw',
+        'l_hip', 'l_back_knee', 'l_back_ankle', #'l_back_paw',
+        # 'lure'
+    ]   # excludes paws & lure for now!
 
 
 def get_skeleton():
-    return [['nose', 'l_eye'], ['nose', 'r_eye'], ['nose', 'neck_base'], ['l_eye', 'neck_base'], ['r_eye', 'neck_base'], 
-            ['neck_base', 'spine'], ['spine', 'tail_base'], ['tail_base', 'tail1'], ['tail1', 'tail2'],
-            ['neck_base', 'r_shoulder'], ['r_shoulder', 'r_front_knee'], ['r_front_knee', 'r_front_ankle'], #['r_front_ankle', 'r_front_paw'], 
-            ['neck_base', 'l_shoulder'], ['l_shoulder', 'l_front_knee'], ['l_front_knee', 'l_front_ankle'], #['l_front_ankle', 'l_front_paw'], 
-            ['tail_base', 'r_hip'], ['r_hip', 'r_back_knee'], ['r_back_knee', 'r_back_ankle'], #['r_back_ankle', 'r_back_paw'],
-            ['tail_base', 'l_hip'], ['l_hip', 'l_back_knee'], ['l_back_knee', 'l_back_ankle'], #['l_back_ankle', 'l_back_paw']
-           ] # exludes paws for now!
+    return [
+        ['nose', 'l_eye'], ['nose', 'r_eye'], ['nose', 'neck_base'], ['l_eye', 'neck_base'], ['r_eye', 'neck_base'],
+        ['neck_base', 'spine'], ['spine', 'tail_base'], ['tail_base', 'tail1'], ['tail1', 'tail2'],
+        ['neck_base', 'r_shoulder'], ['r_shoulder', 'r_front_knee'], ['r_front_knee', 'r_front_ankle'], #['r_front_ankle', 'r_front_paw'],
+        ['neck_base', 'l_shoulder'], ['l_shoulder', 'l_front_knee'], ['l_front_knee', 'l_front_ankle'], #['l_front_ankle', 'l_front_paw'],
+        ['tail_base', 'r_hip'], ['r_hip', 'r_back_knee'], ['r_back_knee', 'r_back_ankle'], #['r_back_ankle', 'r_back_paw'],
+        ['tail_base', 'l_hip'], ['l_hip', 'l_back_knee'], ['l_back_knee', 'l_back_ankle'], #['l_back_ankle', 'l_back_paw']
+    ]   # exludes paws for now!
 
 
 def get_pose_params():
@@ -129,7 +131,7 @@ def redescending_loss(err, a, b, c):
 
     def func_piece(start, end, x):
         return func_step(start, x) - func_step(end, x)
-    
+
     e = abs(err)
     cost = 0.0
     cost += (1 - func_step(a, e))/2*e**2
@@ -143,13 +145,13 @@ def global_positions(R_arr, t_arr):
     "Returns a vector of camera position vectors in the world frame"
     R_arr = np.array(R_arr).reshape((-1, 3, 3))
     t_arr = np.array(t_arr).reshape((-1, 3, 1))
-    
+
     positions = []
     assert R_arr.shape[0]==t_arr.shape[0], 'Number of cams in R_arr do not match t_arr'
     for r, t in zip(R_arr, t_arr):
         pos = -r.T @ t
         positions.append(pos)
-        
+
     return np.array(positions, dtype=np.float32)
 
 
@@ -167,7 +169,7 @@ def rotation_matrix_from_vectors(u,v):
 
     U = (u/np.linalg.norm(u)).reshape(3)
     V = (v/np.linalg.norm(v)).reshape(3)
-    
+
     W = np.cross(U, V)
     A = np.array([U, W, np.cross(U, W)]).T
     B = np.array([V, W, np.cross(V, W)]).T
