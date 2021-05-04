@@ -21,7 +21,7 @@ from lib.misc import get_markers
 plt.style.use(os.path.join('/configs', 'mplstyle.yaml'))
 
 
-def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
+def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thresh, plot: bool = False):
     # === INITIAL VARIABLES ===
 
     # dirs
@@ -58,7 +58,6 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     t0 = time()
 
     # ========= LAMBDIFY SYMBOLIC FUNCTIONS ========
-
     func_map   = {
         'sin': pyo.sin,
         'cos': pyo.cos,
@@ -70,9 +69,7 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         lamb = sp.lambdify(sym_list, positions[i,:], modules=[func_map])
         pos_funcs.append(lamb)
 
-
     # ========= PROJECTION FUNCTIONS ========
-
     def pt3d_to_2d(x, y, z, K, D, R, t):
         x_2d = x*R[0,0] + y*R[0,1] + z*R[0,2] + t.flatten()[0]
         y_2d = x*R[1,0] + y*R[1,1] + z*R[1,2] + t.flatten()[1]
@@ -99,20 +96,14 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         v = pt3d_to_2d(x, y, z, K, D, R, t)[1]
         return v
 
-
     # ========= IMPORT CAMERA & SCENE PARAMS ========
-
-    K_arr, D_arr, R_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
+    K_arr, D_arr, R_arr, t_arr, n_cams = camera_params
     D_arr = D_arr.reshape((-1,4))
-    assert res == cam_res
 
     # ========= IMPORT DATA ========
-
     markers = misc.get_markers()
-
-    R = 5 # measurement standard deviation
-
-    Q = [ # model parameters variance
+    R = 5   # measurement standard deviation
+    Q = [   # model parameters variance
         4, 7, 5,    # head position in inertial
         13, 9, 26,  # head rotation in inertial
         32, 18, 12, # neck
@@ -147,14 +138,9 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     #===================================================
     #                   Load in data
     #===================================================
-
-    print('Loading data')
-
-    df_paths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
-
-    points_2d_df = utils.load_dlc_points_as_df(df_paths, verbose=False)
+    print('Generating pairwise 3D points')
     points_3d_df = utils.get_pairwise_3d_points_from_df(
-        points_2d_df[points_2d_df['likelihood'] > dlc_thresh],
+        points_2d_df,
         K_arr, D_arr, R_arr, t_arr,
         triangulate_points_fisheye
     )
@@ -448,7 +434,7 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     app.plot_cheetah_states(x, out_fpath=fig_fpath)
 
 
-def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, end_frame, dlc_thresh):
+def ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thresh):
     # ========= INIT VARS ========
     # dirs
     OUT_DIR = os.path.join(DATA_DIR, 'ekf')
@@ -456,7 +442,7 @@ def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, e
     # logging
     app.start_logging(os.path.join(OUT_DIR, 'ekf.log'))
     # camera
-    k_arr, d_arr, r_arr, t_arr = camera_params
+    k_arr, d_arr, r_arr, t_arr, cam_res, n_cams = camera_params
     camera_params = [[K, D, R, T] for K, D, R, T in zip(k_arr, d_arr, r_arr, t_arr)]
     # marker
     markers = misc.get_markers()    # define DLC labels
@@ -473,7 +459,7 @@ def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, e
     # other vars
     n_frames = end_frame - start_frame + 1
     sigma_bound = 3
-    max_pixel_err = camera_resolution[0]  # used in measurement covariance R
+    max_pixel_err = cam_res[0]  # used in measurement covariance R
     sT = 1.0 / fps  # timestep
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
@@ -528,12 +514,13 @@ def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, e
     # Pixels array
     pixels_df = points_df.loc[:, (range(n_cams), markers, ['x','y'])]
     pixels_df = pixels_df.reindex(columns=pd.MultiIndex.from_product([range(n_cams), markers, ['x','y']]))
-    pixels_arr = pixels_df.to_numpy() #shape - (n_frames, n_cams * n_markers * 2)
+    pixels_arr = pixels_df.to_numpy()   # (n_frames, n_cams * n_markers * 2)
+    print(pixels_arr.shape)
 
     # Likelihood array
     likelihood_df = points_df.loc[:, (range(n_cams), markers, 'likelihood')]
     likelihood_df = likelihood_df.reindex(columns=pd.MultiIndex.from_product([range(n_cams), markers, ['likelihood']]))
-    likelihood_arr = likelihood_df.to_numpy() #shape - (n_frames, n_cams * n_markers * 1)
+    likelihood_arr = likelihood_df.to_numpy()   # (n_frames, n_cams * n_markers * 1)
 
     # ========= INITIALIZE EKF MATRICES ========
 
@@ -627,17 +614,12 @@ def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, e
     P_est_hist = np.zeros((n_frames, n_states, n_states))
     P_pred_hist = P_est_hist.copy()
 
-    t1 = time()
-    print('\nInitialization took {0:.2f} seconds\n'.format(t1 - t0))
-
     # ========= RUN EKF & SMOOTHER ========
-
     t0 = time()
     outliers_ignored = 0
 
-    for i in range(n_frames):
-        print(f'Running frame {i+start_frame+1}\r', end='')
-
+    print('Running EKF...')
+    for i in tqdm(range(n_frames)):
         # ========== PREDICTION ==========
 
         # Predict State
@@ -649,13 +631,12 @@ def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, e
         P_pred_hist[i] = P
 
         # ============ UPDATE ============
-
-        z_k = pixels_arr[i+start_frame]
-        likelihood = likelihood_arr[i+start_frame]
+        z_k = pixels_arr[i + start_frame]
+        likelihood = likelihood_arr[i + start_frame]
 
         # Measurement
         H = np.zeros((n_cams*n_markers*2, n_states))
-        h = np.zeros((n_cams*n_markers*2)) # same as H[:, 0].copy()
+        h = np.zeros((n_cams*n_markers*2))  # same as H[:, 0].copy()
         for j in range(n_cams):
             # State measurement
             h[j*n_markers*2:(j+1)*n_markers*2] = h_function(states[:vel_idx], *camera_params[j]).flatten()
@@ -726,12 +707,13 @@ def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, e
 def sba(DATA_DIR, points_2d_df, start_frame, end_frame, dlc_thresh, scene_fpath, plot: bool = False):
     OUT_DIR = os.path.join(DATA_DIR, 'sba')
     os.makedirs(OUT_DIR, exist_ok=True)
-
     app.start_logging(os.path.join(OUT_DIR, 'sba.log'))
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
         json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
+    # get 3D points
+    points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
     points_3d_df, residuals = app.sba_points_fisheye(scene_fpath, points_2d_df)
 
     app.stop_logging()
@@ -764,6 +746,7 @@ def tri(DATA_DIR, points_2d_df, start_frame, end_frame, dlc_thresh, scene_fpath)
         json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     # triangulation
+    points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
     points_3d_df = utils.get_pairwise_3d_points_from_df(
         points_2d_df,
         k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
@@ -794,7 +777,6 @@ def dlc(DATA_DIR, dlc_thresh):
 
 
 # ========= MAIN ========
-
 if __name__ == '__main__':
     parser = ArgumentParser(description='All Optimizations')
     parser.add_argument('--data_dir', type=str, help='The file path to the flick/run to be optimized.')
@@ -822,8 +804,7 @@ if __name__ == '__main__':
     # load scene data
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
     assert res == cam_res
-    camera_params = (k_arr, d_arr, r_arr, t_arr)
-    camera_resolution = cam_res
+    camera_params = (k_arr, d_arr, r_arr, t_arr, cam_res, n_cams)
     # load DLC data
     dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
     assert n_cams == len(dlc_points_fpaths)
@@ -850,25 +831,22 @@ if __name__ == '__main__':
                 break
         if start_frame is None or end_frame is None:
             raise('Setting frames failed. Please define start and end frames manually.')
-
-        points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
     else:
         # User-defined frames
         start_frame = args.start_frame - 1  # 0 based indexing
         end_frame = args.end_frame % num_frames + 1 if args.end_frame == -1 else args.end_frame
-        points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame)]
         points_2d_df = points_2d_df[points_2d_df['likelihood'] > args.dlc_thresh]    # ignore points with low likelihood
     assert len(k_arr) == points_2d_df['camera'].nunique()
 
-    # print('========== Triangulation ==========\n')
-    # tri(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
-    # plt.close('all')
+    print('========== Triangulation ==========\n')
+    tri(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
+    plt.close('all')
     print('========== SBA ==========\n')
     sba(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath, args.plot)
     plt.close('all')
-    print('========== EKF ==========\n')
-    ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, end_frame, args.dlc_thresh)
-    plt.close('all')
+    # print('========== EKF ==========\n')
+    # ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh)
+    # plt.close('all')
     print('========== FTE ==========\n')
     fte(DATA_DIR, DLC_DIR, start_frame, end_frame, args.dlc_thresh, args.plot)
     plt.close('all')
@@ -876,7 +854,7 @@ if __name__ == '__main__':
     if args.plot:
         print('Plotting results...')
         data_fpaths = [
-            #os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
+            # os.path.join(DATA_DIR, 'tri', 'tri.pickle'), # plot is too busy when tri is included
             os.path.join(DATA_DIR, 'sba', 'sba.pickle'),
             os.path.join(DATA_DIR, 'ekf', 'ekf.pickle'),
             os.path.join(DATA_DIR, 'fte', 'fte.pickle')
