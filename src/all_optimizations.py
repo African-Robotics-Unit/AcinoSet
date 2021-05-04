@@ -22,18 +22,23 @@ plt.style.use(os.path.join('/configs', 'mplstyle.yaml'))
 
 
 def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
-    # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
-    # we use a redescending cost to stop outliers affecting the optimisation negatively
+    # === INITIAL VARIABLES ===
+
+    # dirs
+    OUT_DIR = os.path.join(DATA_DIR, 'fte')
+    os.makedirs(OUT_DIR, exist_ok=True)
+    app.start_logging(os.path.join(OUT_DIR, 'fte.log'))
+    # cost function
     redesc_a = 3
     redesc_b = 10
     redesc_c = 20
-
-    # plot
-    r_x = np.arange(-20, 20, 1e-1)
-    r_y1 = [misc.redescending_loss(i, redesc_a, redesc_b, redesc_c) for i in r_x]
-    r_y2 = abs(r_x)
-    r_y3 = r_x ** 2
+    # PLOT OF REDESCENDING, ABSOLUTE AND QUADRATIC COST FUNCTIONS
+    # we use a redescending cost to stop outliers affecting the optimisation negatively
     if plot:
+        r_x = np.arange(-20, 20, 1e-1)
+        r_y1 = [misc.redescending_loss(i, redesc_a, redesc_b, redesc_c) for i in r_x]
+        r_y2 = abs(r_x)
+        r_y3 = r_x ** 2
         plt.figure()
         plt.plot(r_x,r_y1, label='Redescending')
         plt.plot(r_x,r_y2, label='Absolute (linear)')
@@ -42,28 +47,23 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
         ax.set_ylim((-5, 50))
         ax.legend()
         plt.show(block=True)
-
-    t0 = time()
-
-    OUT_DIR = os.path.join(DATA_DIR, 'fte')
-    os.makedirs(OUT_DIR, exist_ok=True)
-
-    app.start_logging(os.path.join(OUT_DIR, 'fte.log'))
-
-    # load video info
-    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-
+    # save parameters
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
         json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
-
     # symbolic vars
     idx       = misc.get_pose_params()
     sym_list  = sp.symbols(list(idx.keys()))
     positions = misc.get_3d_marker_coords(sym_list)
 
+    t0 = time()
+
     # ========= LAMBDIFY SYMBOLIC FUNCTIONS ========
 
-    func_map   = {'sin':pyo.sin, 'cos':pyo.cos, 'ImmutableDenseMatrix':np.array}
+    func_map   = {
+        'sin': pyo.sin,
+        'cos': pyo.cos,
+        'ImmutableDenseMatrix': np.array
+    }
     pose_to_3d = sp.lambdify(sym_list, positions, modules=[func_map])
     pos_funcs  = []
     for i in range(positions.shape[0]):
@@ -448,56 +448,44 @@ def fte(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
     app.plot_cheetah_states(x, out_fpath=fig_fpath)
 
 
-def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
+def ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, end_frame, dlc_thresh):
     # ========= INIT VARS ========
-
-    t0 = time()
-
+    # dirs
     OUT_DIR = os.path.join(DATA_DIR, 'ekf')
     os.makedirs(OUT_DIR, exist_ok=True)
-
+    # logging
     app.start_logging(os.path.join(OUT_DIR, 'ekf.log'))
-
-    idx = misc.get_pose_params() # define the indices for the states
-    markers = misc.get_markers() # define DLC labels
-
+    # camera
+    k_arr, d_arr, r_arr, t_arr = camera_params
+    camera_params = [[K, D, R, T] for K, D, R, T in zip(k_arr, d_arr, r_arr, t_arr)]
+    # marker
+    markers = misc.get_markers()    # define DLC labels
     n_markers = len(markers)
+    # pose
+    idx = misc.get_pose_params()    # define the indices for the states
     n_pose_params = len(idx)
-    n_states = 3*n_pose_params
-    vel_idx = n_states//3
-    acc_idx = n_states*2//3
-
+    n_states = 3 * n_pose_params
+    vel_idx = n_states // 3
+    acc_idx = n_states * 2 // 3
     derivs = {'d'+state: vel_idx+idx[state] for state in idx}
     derivs.update({'d'+state: vel_idx+derivs[state] for state in derivs})
     idx.update(derivs)
-
-    # load video info
-    res, fps, tot_frames, _ = app.get_vid_info(DATA_DIR) # path to original videos
-
-    # Load extrinsic params
-    k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR)
-    assert res == cam_res
-    camera_params = [[K, D, R, T] for K, D, R, T in zip(k_arr, d_arr, r_arr, t_arr)]
-
     # other vars
-    n_frames = end_frame-start_frame
+    n_frames = end_frame - start_frame + 1
     sigma_bound = 3
-    max_pixel_err = cam_res[0] # used in measurement covariance R
-    sT = 1.0/fps # timestep
+    max_pixel_err = camera_resolution[0]  # used in measurement covariance R
+    sT = 1.0 / fps  # timestep
 
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
         json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     # ========= FUNCTION DEFINITINOS ========
-
     def h_function(x: np.ndarray, k: np.ndarray, d: np.ndarray, r: np.ndarray, t: np.ndarray):
         """Returns a numpy array of the 2D marker pixel coordinates (shape Nx2) for a given state vector x and camera parameters k, d, r, t.
         """
         coords_3d = misc.get_3d_marker_coords(x)
         coords_2d = project_points_fisheye(coords_3d, k, d, r, t) # Project the 3D positions to 2D
-
         return coords_2d
-
 
     def predict_next_state(x: np.ndarray, dt: np.float32):
         """Returns a numpy array of the predicted states for a given state vector x and time delta dt.
@@ -505,9 +493,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
         acc_prediction = x[acc_idx:]
         vel_prediction = x[vel_idx:acc_idx] + dt*acc_prediction
         pos_prediction = x[:vel_idx] + dt*vel_prediction + (0.5*dt**2)*acc_prediction
-
         return np.concatenate([pos_prediction, vel_prediction, acc_prediction]).astype(np.float32)
-
 
     def numerical_jacobian(func, x: np.ndarray, *args):
         """Returns a numerically approximated jacobian of func with respect to x.
@@ -526,19 +512,12 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
         return jac
 
-
     # ========= LOAD DLC DATA ========
 
     # Load DLC 2D point files (.h5 outputs)
-    dlc_2d_point_files = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
-    assert(len(dlc_2d_point_files) == n_cams), f'# of dlc .h5 files != # of cams in {n_cams}_cam_scene_sba.json'
-
-    # Load Measurement Data (pixels, likelihood)
-    points_2d_df = utils.load_dlc_points_as_df(dlc_2d_point_files, verbose=False)
-
     points_3d_df = utils.get_pairwise_3d_points_from_df(
-        points_2d_df[points_2d_df['likelihood']>dlc_thresh], # ignore points with low likelihood
-        k_arr, d_arr.reshape((-1,4)), r_arr, t_arr,
+        points_2d_df,
+        k_arr, d_arr.reshape((-1, 4)), r_arr, t_arr,
         triangulate_points_fisheye
     )
 
@@ -603,10 +582,11 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     p_ang_acc[10:] = 5**2
     # p_lure_acc = p_lin_acc
 
-    P = np.diag(np.concatenate([p_lin_pos, p_ang_pos, #p_lure_pos,
-                                p_lin_vel, p_ang_vel, #p_lure_vel,
-                                p_lin_acc, p_ang_acc, #p_lure_acc
-                               ]))
+    P = np.diag(np.concatenate([
+        p_lin_pos, p_ang_pos, #p_lure_pos,
+        p_lin_vel, p_ang_vel, #p_lure_vel,
+        p_lin_acc, p_ang_acc, #p_lure_acc
+    ]))
 
     # PROCESS COVARIANCE Q - how 'noisy' the constant acceleration model is
     qb_list = [
@@ -653,7 +633,6 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
     # ========= RUN EKF & SMOOTHER ========
 
     t0 = time()
-
     outliers_ignored = 0
 
     for i in range(n_frames):
@@ -694,7 +673,7 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
 
         # Residual Covariance S
         S = (H @ P @ H.T) + R
-        temp = sigma_bound*np.sqrt(np.diag(S)) # if measurement residual is worse than 3 sigma, set residual to 0 and rely on predicted state only
+        temp = sigma_bound * np.sqrt(np.diag(S))    # if measurement residual is worse than 3 sigma, set residual to 0 and rely on predicted state only
         for j in range(0, len(residual), 2):
             if np.abs(residual[j])>temp[j] or np.abs(residual[j+1])>temp[j+1]:
                 residual[j:j+2] = 0
@@ -722,53 +701,36 @@ def ekf(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh):
         smooth_states_est_hist[i] = states_est_hist[i] + A @ (smooth_states_est_hist[i+1] - states_pred_hist[i+1])
         smooth_P_est_hist[i] = P_est_hist[i] + A @ (smooth_P_est_hist[i+1] - P_pred_hist[i+1]) @ A.T
 
-    print('\nKalman Smoother complete!\n')
     t1 = time()
+    print('\nKalman Smoother complete!\n')
     print('Optimization took {0:.2f} seconds\n'.format(t1 - t0))
 
     app.stop_logging()
 
     # ========= SAVE EKF RESULTS ========
 
-    states = dict(x=states_est_hist[:, :vel_idx],
-                  dx=states_est_hist[:, vel_idx:acc_idx],
-                  ddx=states_est_hist[:, acc_idx:],
-                  smoothed_x=smooth_states_est_hist[:, :vel_idx],
-                  smoothed_dx=smooth_states_est_hist[:, vel_idx:acc_idx],
-                  smoothed_ddx=smooth_states_est_hist[:, acc_idx:]
-                 )
+    states = dict(
+        x=states_est_hist[:, :vel_idx],
+        dx=states_est_hist[:, vel_idx:acc_idx],
+        ddx=states_est_hist[:, acc_idx:],
+        smoothed_x=smooth_states_est_hist[:, :vel_idx],
+        smoothed_dx=smooth_states_est_hist[:, vel_idx:acc_idx],
+        smoothed_ddx=smooth_states_est_hist[:, acc_idx:]
+    )
     app.save_ekf(states, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
-    fig_fpath= os.path.join(OUT_DIR, 'ekf.svg')
+    fig_fpath = os.path.join(OUT_DIR, 'ekf.svg')
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
 
 
-def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = False):
-    t0 = time()
-
+def sba(DATA_DIR, points_2d_df, start_frame, end_frame, dlc_thresh, scene_fpath, plot: bool = False):
     OUT_DIR = os.path.join(DATA_DIR, 'sba')
     os.makedirs(OUT_DIR, exist_ok=True)
 
     app.start_logging(os.path.join(OUT_DIR, 'sba.log'))
 
-    # load video info
-    N = end_frame-start_frame
-
     with open(os.path.join(OUT_DIR, 'reconstruction_params.json'), 'w') as f:
         json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
-
-    *_, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
-
-    dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
-    assert n_cams == len(dlc_points_fpaths)
-
-    # Load Measurement Data (pixels, likelihood)
-    points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
-    points_2d_df = points_2d_df[points_2d_df['frame'].between(start_frame, end_frame-1)]
-    points_2d_df = points_2d_df[points_2d_df['likelihood']>dlc_thresh] # ignore points with low likelihood
-
-    t1 = time()
-    print('Initialization took {0:.2f} seconds\n'.format(t1 - t0))
 
     points_3d_df, residuals = app.sba_points_fisheye(scene_fpath, points_2d_df)
 
@@ -784,7 +746,7 @@ def sba(DATA_DIR, DLC_DIR, start_frame, end_frame, dlc_thresh, plot: bool = Fals
 
     # ========= SAVE SBA RESULTS ========
     markers = misc.get_markers()
-    positions = np.full((N, len(markers), 3), np.nan)
+    positions = np.full((end_frame - start_frame + 1, len(markers), 3), np.nan)
 
     for i, marker in enumerate(markers):
         marker_pts = points_3d_df[points_3d_df['marker']==marker][['frame', 'x', 'y', 'z']].values
@@ -859,6 +821,9 @@ if __name__ == '__main__':
 
     # load scene data
     k_arr, d_arr, r_arr, t_arr, cam_res, n_cams, scene_fpath = utils.find_scene_file(DATA_DIR, verbose=False)
+    assert res == cam_res
+    camera_params = (k_arr, d_arr, r_arr, t_arr)
+    camera_resolution = cam_res
     # load DLC data
     dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
     assert n_cams == len(dlc_points_fpaths)
@@ -899,14 +864,14 @@ if __name__ == '__main__':
     # tri(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
     # plt.close('all')
     print('========== SBA ==========\n')
-    sba(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh, args.plot)
+    sba(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath, args.plot)
     plt.close('all')
-    # print('========== EKF ==========\n')
-    # ekf(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh)
-    # plt.close('all')
-    # print('========== FTE ==========\n')
-    # fte(DATA_DIR, DLC_DIR, args.start_frame, args.end_frame, args.dlc_thresh, args.plot)
-    # plt.close('all')
+    print('========== EKF ==========\n')
+    ekf(DATA_DIR, points_2d_df, camera_params, camera_resolution, start_frame, end_frame, args.dlc_thresh)
+    plt.close('all')
+    print('========== FTE ==========\n')
+    fte(DATA_DIR, DLC_DIR, start_frame, end_frame, args.dlc_thresh, args.plot)
+    plt.close('all')
 
     if args.plot:
         print('Plotting results...')
