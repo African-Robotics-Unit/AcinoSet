@@ -97,7 +97,7 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
         return v
 
     # ========= IMPORT CAMERA & SCENE PARAMS ========
-    K_arr, D_arr, R_arr, t_arr, n_cams = camera_params
+    K_arr, D_arr, R_arr, t_arr, cam_res, n_cams = camera_params
     D_arr = D_arr.reshape((-1,4))
 
     # ========= IMPORT DATA ========
@@ -140,7 +140,7 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     #===================================================
     print('Generating pairwise 3D points')
     points_3d_df = utils.get_pairwise_3d_points_from_df(
-        points_2d_df,
+        points_2d_df.query(f'likelihood > {dlc_thresh}'),
         K_arr, D_arr, R_arr, t_arr,
         triangulate_points_fisheye
     )
@@ -148,20 +148,18 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     #===================================================
     #                   Optimisation
     #===================================================
-
     print('Initialising params & variables')
-    m = pyo.ConcreteModel(name = 'Cheetah from measurements')
+    m = pyo.ConcreteModel(name='Cheetah from measurements')
 
     # ===== SETS =====
-
-    N  = end_frame-start_frame # number of timesteps in trajectory
+    N  = end_frame - start_frame + 1    # number of timesteps in trajectory
     P  = len(sym_list)         # number of pose parameters
     L  = len(markers)          # number of dlc labels per frame
     C  = n_cams                # number of cameras
     D2 = 2                     # dimensionality of measurements (image points)
     D3 = 3                     # dimensionality of measurements (3d points)
 
-    m.Ts = 1.0/fps # timestep
+    m.Ts = 1.0 / fps # timestep
     m.N  = pyo.RangeSet(N)
     m.P  = pyo.RangeSet(P)
     m.L  = pyo.RangeSet(L)
@@ -170,26 +168,24 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     m.D3 = pyo.RangeSet(D3)
 
     # ======= WEIGHTS =======
-
     def init_meas_weights(model, n, c, l):
-        likelihood = get_likelihood_from_df(n+start_frame, c, l)
+        likelihood = get_likelihood_from_df(n + start_frame, c, l)
         if likelihood > dlc_thresh:
-            return 1/R
+            return 1 / R
         else:
             return 0
 
     def init_model_weights(m, p):
-        return 1/Q[p-1]
+        return 1 / Q[p-1]
 
     def init_measurements_df(m, n, c, l, d2):
         return get_meas_from_df(n+start_frame, c, l, d2)
 
-    m.meas_err_weight  = pyo.Param(m.N, m.C, m.L, initialize = init_meas_weights, mutable=True)
-    m.model_err_weight = pyo.Param(m.P, initialize = init_model_weights)
-    m.meas             = pyo.Param(m.N, m.C, m.L, m.D2, initialize = init_measurements_df)
+    m.meas_err_weight  = pyo.Param(m.N, m.C, m.L, initialize=init_meas_weights, mutable=True)
+    m.model_err_weight = pyo.Param(m.P, initialize=init_model_weights)
+    m.meas             = pyo.Param(m.N, m.C, m.L, m.D2, initialize=init_measurements_df)
 
     # ===== MODEL VARIABLES =====
-
     m.x           = pyo.Var(m.N, m.P) # position
     m.dx          = pyo.Var(m.N, m.P) # velocity
     m.ddx         = pyo.Var(m.N, m.P) # acceleration
@@ -200,7 +196,8 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     # ===== VARIABLES INITIALIZATION =====
 
     # estimate initial points
-    frame_est = np.arange(end_frame)
+    frame_est = np.arange(end_frame + 1)
+    print('frame_est:', frame_est.shape)
     init_x    = np.zeros((N, P))
     init_dx   = np.zeros((N, P))
     init_ddx  = np.zeros((N, P))
@@ -215,10 +212,15 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     z_est   = frame_est*z_slope + z_intercept
     psi_est = np.arctan2(y_slope, x_slope)
 
-    init_x[:,idx['x_0']]   = x_est[start_frame: end_frame]
-    init_x[:,idx['y_0']]   = y_est[start_frame: end_frame]
-    init_x[:,idx['z_0']]   = z_est[start_frame: end_frame]
-    init_x[:,idx['psi_0']] = psi_est # psi = yaw
+    print('idx[x_0]:', idx['x_0'])
+    print('init_x:', init_x.shape)
+    print('x_est:', x_est.shape)
+    print('start_frame:', start_frame)
+    print('end_frame:', end_frame)
+    init_x[:, idx['x_0']]   = x_est[start_frame:end_frame+1]
+    init_x[:, idx['y_0']]   = y_est[start_frame:end_frame+1]
+    init_x[:, idx['z_0']]   = z_est[start_frame:end_frame+1]
+    init_x[:, idx['psi_0']] = psi_est # psi = yaw
 
     for n in m.N:
         for p in m.P:
@@ -234,7 +236,6 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
                 m.poses[n,l,d3].value = pos[d3-1]
 
     # ===== CONSTRAINTS =====
-
     print('Defining constraints')
 
     # NOTE: 1 based indexing for pyomo!!!!...@#^!@#&
@@ -245,100 +246,90 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
 
     print('- Pose')
 
-    def pose_constraint(m,n,l,d3):
+    def pose_constraint(m, n, l, d3):
         var_list = [m.x[n,p] for p in m.P]
         [pos] = pos_funcs[l-1](*var_list) # get 3d points
         return pos[d3-1] == m.poses[n,l,d3]
 
-    m.pose_constraint = pyo.Constraint(m.N, m.L, m.D3, rule = pose_constraint)
+    m.pose_constraint = pyo.Constraint(m.N, m.L, m.D3, rule=pose_constraint)
 
     # define these constraint functions in a loop?
     # head
-    def head_phi_0(m,n):
-        return abs(m.x[n,idx['phi_0']]) <= np.pi/6
-    def head_theta_0(m,n):
-        return abs(m.x[n,idx['theta_0']]) <= np.pi/6
-
+    def head_phi_0(m, n):
+        return abs(m.x[n,idx['phi_0']]) <= np.pi / 6
+    def head_theta_0(m, n):
+        return abs(m.x[n,idx['theta_0']]) <= np.pi / 6
     # neck
-    def neck_phi_1(m,n):
-        return abs(m.x[n,idx['phi_1']]) <= np.pi/6
-    def neck_theta_1(m,n):
-        return abs(m.x[n,idx['theta_1']]) <= np.pi/6
-    def neck_psi_1(m,n):
-        return abs(m.x[n,idx['psi_1']]) <= np.pi/6
-
+    def neck_phi_1(m, n):
+        return abs(m.x[n,idx['phi_1']]) <= np.pi / 6
+    def neck_theta_1(m, n):
+        return abs(m.x[n,idx['theta_1']]) <= np.pi / 6
+    def neck_psi_1(m, n):
+        return abs(m.x[n,idx['psi_1']]) <= np.pi / 6
     # front torso
     def front_torso_theta_2(m,n):
-        return abs(m.x[n,idx['theta_2']]) <= np.pi/6
-
+        return abs(m.x[n,idx['theta_2']]) <= np.pi / 6
     # back torso
     def back_torso_theta_3(m,n):
-        return abs(m.x[n,idx['theta_3']]) <= np.pi/6
+        return abs(m.x[n,idx['theta_3']]) <= np.pi / 6
     def back_torso_phi_3(m,n):
-        return abs(m.x[n,idx['phi_3']]) <= np.pi/6
+        return abs(m.x[n,idx['phi_3']]) <= np.pi / 6
     def back_torso_psi_3(m,n):
-        return abs(m.x[n,idx['psi_3']]) <= np.pi/6
-
+        return abs(m.x[n,idx['psi_3']]) <= np.pi / 6
     # tail base
     def tail_base_theta_4(m,n):
-        return abs(m.x[n,idx['theta_4']]) <= np.pi/1.5
+        return abs(m.x[n,idx['theta_4']]) <= np.pi / 1.5
     def tail_base_psi_4(m,n):
-        return abs(m.x[n,idx['psi_4']]) <= np.pi/1.5
-
+        return abs(m.x[n,idx['psi_4']]) <= np.pi / 1.5
     # tail mid
     def tail_mid_theta_5(m,n):
-        return abs(m.x[n,idx['theta_5']]) <= np.pi/1.5
+        return abs(m.x[n,idx['theta_5']]) <= np.pi / 1.5
     def tail_mid_psi_5(m,n):
-        return abs(m.x[n,idx['psi_5']]) <= np.pi/1.5
-
+        return abs(m.x[n,idx['psi_5']]) <= np.pi / 1.5
     # front left leg
     def l_shoulder_theta_6(m,n):
-        return abs(m.x[n,idx['theta_6']]) <= np.pi/2
+        return abs(m.x[n,idx['theta_6']]) <= np.pi / 2
     def l_front_knee_theta_7(m,n):
-        return abs(m.x[n,idx['theta_7']] + np.pi/2) <= np.pi/2
-
+        return abs(m.x[n,idx['theta_7']] + np.pi/2) <= np.pi / 2
     # front right leg
     def r_shoulder_theta_8(m,n):
-        return abs(m.x[n,idx['theta_8']]) <= np.pi/2
+        return abs(m.x[n,idx['theta_8']]) <= np.pi / 2
     def r_front_knee_theta_9(m,n):
-        return abs(m.x[n,idx['theta_9']] + np.pi/2) <= np.pi/2
-
+        return abs(m.x[n,idx['theta_9']] + np.pi/2) <= np.pi / 2
     # back left leg
     def l_hip_theta_10(m,n):
-        return abs(m.x[n,idx['theta_10']]) <= np.pi/2
+        return abs(m.x[n,idx['theta_10']]) <= np.pi / 2
     def l_back_knee_theta_11(m,n):
-        return abs(m.x[n,idx['theta_11']] - np.pi/2) <= np.pi/2
-
+        return abs(m.x[n,idx['theta_11']] - np.pi/2) <= np.pi / 2
     # back right leg
     def r_hip_theta_12(m,n):
-        return abs(m.x[n,idx['theta_12']]) <= np.pi/2
+        return abs(m.x[n,idx['theta_12']]) <= np.pi / 2
     def r_back_knee_theta_13(m,n):
-        return abs(m.x[n,idx['theta_13']] - np.pi/2) <= np.pi/2
+        return abs(m.x[n,idx['theta_13']] - np.pi/2) <= np.pi / 2
 
-    m.head_phi_0           = pyo.Constraint(m.N, rule = head_phi_0)
-    m.head_theta_0         = pyo.Constraint(m.N, rule = head_theta_0)
-    m.neck_phi_1           = pyo.Constraint(m.N, rule = neck_phi_1)
-    m.neck_theta_1         = pyo.Constraint(m.N, rule = neck_theta_1)
-    m.neck_psi_1           = pyo.Constraint(m.N, rule = neck_psi_1)
-    m.front_torso_theta_2  = pyo.Constraint(m.N, rule = front_torso_theta_2)
-    m.back_torso_theta_3   = pyo.Constraint(m.N, rule = back_torso_theta_3)
-    m.back_torso_phi_3     = pyo.Constraint(m.N, rule = back_torso_phi_3)
-    m.back_torso_psi_3     = pyo.Constraint(m.N, rule = back_torso_psi_3)
-    m.tail_base_theta_4    = pyo.Constraint(m.N, rule = tail_base_theta_4)
-    m.tail_base_psi_4      = pyo.Constraint(m.N, rule = tail_base_psi_4)
-    m.tail_mid_theta_5     = pyo.Constraint(m.N, rule = tail_mid_theta_5)
-    m.tail_mid_psi_5       = pyo.Constraint(m.N, rule = tail_mid_psi_5)
-    m.l_shoulder_theta_6   = pyo.Constraint(m.N, rule = l_shoulder_theta_6)
-    m.l_front_knee_theta_7 = pyo.Constraint(m.N, rule = l_front_knee_theta_7)
-    m.r_shoulder_theta_8   = pyo.Constraint(m.N, rule = r_shoulder_theta_8)
-    m.r_front_knee_theta_9 = pyo.Constraint(m.N, rule = r_front_knee_theta_9)
-    m.l_hip_theta_10       = pyo.Constraint(m.N, rule = l_hip_theta_10)
-    m.l_back_knee_theta_11 = pyo.Constraint(m.N, rule = l_back_knee_theta_11)
-    m.r_hip_theta_12       = pyo.Constraint(m.N, rule = r_hip_theta_12)
-    m.r_back_knee_theta_13 = pyo.Constraint(m.N, rule = r_back_knee_theta_13)
+    m.head_phi_0           = pyo.Constraint(m.N, rule=head_phi_0)
+    m.head_theta_0         = pyo.Constraint(m.N, rule=head_theta_0)
+    m.neck_phi_1           = pyo.Constraint(m.N, rule=neck_phi_1)
+    m.neck_theta_1         = pyo.Constraint(m.N, rule=neck_theta_1)
+    m.neck_psi_1           = pyo.Constraint(m.N, rule=neck_psi_1)
+    m.front_torso_theta_2  = pyo.Constraint(m.N, rule=front_torso_theta_2)
+    m.back_torso_theta_3   = pyo.Constraint(m.N, rule=back_torso_theta_3)
+    m.back_torso_phi_3     = pyo.Constraint(m.N, rule=back_torso_phi_3)
+    m.back_torso_psi_3     = pyo.Constraint(m.N, rule=back_torso_psi_3)
+    m.tail_base_theta_4    = pyo.Constraint(m.N, rule=tail_base_theta_4)
+    m.tail_base_psi_4      = pyo.Constraint(m.N, rule=tail_base_psi_4)
+    m.tail_mid_theta_5     = pyo.Constraint(m.N, rule=tail_mid_theta_5)
+    m.tail_mid_psi_5       = pyo.Constraint(m.N, rule=tail_mid_psi_5)
+    m.l_shoulder_theta_6   = pyo.Constraint(m.N, rule=l_shoulder_theta_6)
+    m.l_front_knee_theta_7 = pyo.Constraint(m.N, rule=l_front_knee_theta_7)
+    m.r_shoulder_theta_8   = pyo.Constraint(m.N, rule=r_shoulder_theta_8)
+    m.r_front_knee_theta_9 = pyo.Constraint(m.N, rule=r_front_knee_theta_9)
+    m.l_hip_theta_10       = pyo.Constraint(m.N, rule=l_hip_theta_10)
+    m.l_back_knee_theta_11 = pyo.Constraint(m.N, rule=l_back_knee_theta_11)
+    m.r_hip_theta_12       = pyo.Constraint(m.N, rule=r_hip_theta_12)
+    m.r_back_knee_theta_13 = pyo.Constraint(m.N, rule=r_back_knee_theta_13)
 
     # ===== MEASUREMENT CONSTRAINTS =====
-
     print('- Measurement')
 
     def measurement_constraints(m, n, c, l, d2):
@@ -347,10 +338,9 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
         x, y, z    = m.poses[n,l,idx['x_0']], m.poses[n,l,idx['y_0']], m.poses[n,l,idx['z_0']]
         return proj_funcs[d2-1](x, y, z, K, D, R, t) - m.meas[n, c, l, d2] - m.slack_meas[n, c, l, d2] == 0
 
-    m.measurement = pyo.Constraint(m.N, m.C, m.L, m.D2, rule = measurement_constraints)
+    m.measurement = pyo.Constraint(m.N, m.C, m.L, m.D2, rule=measurement_constraints)
 
     # ===== INTEGRATION CONSTRAINTS =====
-
     print('- Numerical integration')
 
     def backwards_euler_pos(m,n,p):
@@ -371,12 +361,11 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
         else:
             return pyo.Constraint.Skip
 
-    m.integrate_p  = pyo.Constraint(m.N, m.P, rule = backwards_euler_pos)
-    m.integrate_v  = pyo.Constraint(m.N, m.P, rule = backwards_euler_vel)
-    m.constant_acc = pyo.Constraint(m.N, m.P, rule = constant_acc)
+    m.integrate_p  = pyo.Constraint(m.N, m.P, rule=backwards_euler_pos)
+    m.integrate_v  = pyo.Constraint(m.N, m.P, rule=backwards_euler_vel)
+    m.constant_acc = pyo.Constraint(m.N, m.P, rule=constant_acc)
 
     # ======= OBJECTIVE FUNCTION =======
-
     print('Defining objective function')
 
     def obj(m):
@@ -389,10 +378,15 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
             for l in m.L:
                 for c in m.C:
                     for d2 in m.D2:
-                        slack_meas_err += misc.redescending_loss(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2], redesc_a, redesc_b, redesc_c)
+                        slack_meas_err += misc.redescending_loss(
+                            m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2],
+                            redesc_a,
+                            redesc_b,
+                            redesc_c
+                        )
         return slack_meas_err + slack_model_err
 
-    m.obj = pyo.Objective(rule = obj)
+    m.obj = pyo.Objective(rule=obj)
 
     # run the solver
     opt = SolverFactory(
@@ -421,7 +415,6 @@ def fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     app.stop_logging()
 
     # ========= SAVE FTE RESULTS ========
-
     x, dx, ddx = [], [], []
     for n in m.N:
         x.append([m.x[n, p].value for p in m.P])
@@ -814,13 +807,13 @@ if __name__ == '__main__':
     if args.end_frame == -1:
         # Automatically set start and end frame
         # defining the first and end frame as detecting all the markers on any of cameras simultaneously
-        points_2d_df = points_2d_df.query(f'likelihood > {args.dlc_thresh}')    # ignore points with low likelihood
+        filtered_points_2d_df = points_2d_df.query(f'likelihood > {args.dlc_thresh}')    # ignore points with low likelihood
         target_markers = misc.get_markers()
         markers_condition = ' or '.join([f'marker=="{ref}"' for ref in target_markers])
-        num_marker = lambda i: len(points_2d_df.query(f'frame == {i} and ({markers_condition})')['marker'].unique())
+        num_marker = lambda i: len(filtered_points_2d_df.query(f'frame == {i} and ({markers_condition})')['marker'].unique())
 
         start_frame, end_frame = None, None
-        max_idx = points_2d_df['frame'].max() + 1
+        max_idx = filtered_points_2d_df['frame'].max() + 1
         for i in range(max_idx):
             if num_marker(i) == len(target_markers):
                 start_frame = i
@@ -835,20 +828,20 @@ if __name__ == '__main__':
         # User-defined frames
         start_frame = args.start_frame - 1  # 0 based indexing
         end_frame = args.end_frame % num_frames + 1 if args.end_frame == -1 else args.end_frame
-        points_2d_df = points_2d_df[points_2d_df['likelihood'] > args.dlc_thresh]    # ignore points with low likelihood
+        filtered_points_2d_df = points_2d_df[points_2d_df['likelihood'] > args.dlc_thresh]    # ignore points with low likelihood
     assert len(k_arr) == points_2d_df['camera'].nunique()
 
-    print('========== Triangulation ==========\n')
-    tri(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
-    plt.close('all')
-    print('========== SBA ==========\n')
-    sba(DATA_DIR, points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath, args.plot)
-    plt.close('all')
+    # print('========== Triangulation ==========\n')
+    # tri(DATA_DIR, filtered_points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
+    # plt.close('all')
+    # print('========== SBA ==========\n')
+    # sba(DATA_DIR, filtered_points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath, args.plot)
+    # plt.close('all')
     # print('========== EKF ==========\n')
-    # ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh)
+    # ekf(DATA_DIR, filtered_points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh)
     # plt.close('all')
     print('========== FTE ==========\n')
-    fte(DATA_DIR, DLC_DIR, start_frame, end_frame, args.dlc_thresh, args.plot)
+    fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh, args.plot)
     plt.close('all')
 
     if args.plot:
