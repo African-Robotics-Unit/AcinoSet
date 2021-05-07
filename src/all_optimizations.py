@@ -508,7 +508,6 @@ def ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     pixels_df = points_df.loc[:, (range(n_cams), markers, ['x','y'])]
     pixels_df = pixels_df.reindex(columns=pd.MultiIndex.from_product([range(n_cams), markers, ['x','y']]))
     pixels_arr = pixels_df.to_numpy()   # (n_frames, n_cams * n_markers * 2)
-    print(pixels_arr.shape)
 
     # Likelihood array
     likelihood_df = points_df.loc[:, (range(n_cams), markers, 'likelihood')]
@@ -533,7 +532,7 @@ def ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     # except ValueError as e: # for when there is no lure data
     #     print(f'Lure initialisation error: '{e}' -> Lure states initialised to zero')
 
-    points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame-1)]
+    points_3d_df = points_3d_df[points_3d_df['frame'].between(start_frame, end_frame)]
 
     nose_pts = points_3d_df[points_3d_df['marker']=='nose'][['frame', 'x', 'y', 'z']].values
     nose_x_slope, nose_x_intercept, *_ = linregress(nose_pts[:,0], nose_pts[:,1])
@@ -614,7 +613,6 @@ def ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     print('Running EKF...')
     for i in tqdm(range(n_frames)):
         # ========== PREDICTION ==========
-
         # Predict State
         states = predict_next_state(states, sT).flatten()
         states_pred_hist[i] = states
@@ -682,7 +680,6 @@ def ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     app.stop_logging()
 
     # ========= SAVE EKF RESULTS ========
-
     states = dict(
         x=states_est_hist[:, :vel_idx],
         dx=states_est_hist[:, vel_idx:acc_idx],
@@ -693,7 +690,7 @@ def ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, dlc_thres
     )
     app.save_ekf(states, OUT_DIR, scene_fpath, start_frame, dlc_thresh)
 
-    fig_fpath = os.path.join(OUT_DIR, 'ekf.svg')
+    fig_fpath = os.path.join(OUT_DIR, 'ekf.pdf')
     app.plot_cheetah_states(states['x'], states['smoothed_x'], fig_fpath)
 
 
@@ -800,7 +797,7 @@ if __name__ == '__main__':
     camera_params = (k_arr, d_arr, r_arr, t_arr, cam_res, n_cams)
     # load DLC data
     dlc_points_fpaths = sorted(glob(os.path.join(DLC_DIR, '*.h5')))
-    assert n_cams == len(dlc_points_fpaths)
+    assert n_cams == len(dlc_points_fpaths), f'# of dlc .h5 files != # of cams in {n_cams}_cam_scene_sba.json'
 
     # load measurement dataframe (pixels, likelihood)
     points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
@@ -831,18 +828,18 @@ if __name__ == '__main__':
         filtered_points_2d_df = points_2d_df[points_2d_df['likelihood'] > args.dlc_thresh]    # ignore points with low likelihood
     assert len(k_arr) == points_2d_df['camera'].nunique()
 
-    print('========== Triangulation ==========\n')
-    tri(DATA_DIR, filtered_points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
-    plt.close('all')
-    print('========== SBA ==========\n')
-    sba(DATA_DIR, filtered_points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath, args.plot)
-    plt.close('all')
+    # print('========== Triangulation ==========\n')
+    # tri(DATA_DIR, filtered_points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath)
+    # plt.close('all')
+    # print('========== SBA ==========\n')
+    # sba(DATA_DIR, filtered_points_2d_df, start_frame, end_frame, args.dlc_thresh, scene_fpath, args.plot)
+    # plt.close('all')
     print('========== EKF ==========\n')
-    ekf(DATA_DIR, filtered_points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh)
+    ekf(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh)
     plt.close('all')
-    print('========== FTE ==========\n')
-    fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh, args.plot)
-    plt.close('all')
+    # print('========== FTE ==========\n')
+    # fte(DATA_DIR, points_2d_df, camera_params, start_frame, end_frame, args.dlc_thresh, args.plot)
+    # plt.close('all')
 
     if args.plot:
         print('Plotting results...')
