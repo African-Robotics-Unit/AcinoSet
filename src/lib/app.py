@@ -252,14 +252,14 @@ def create_labeled_videos(video_fpaths, videotype='mp4', codec='mp4v', outputfra
     from functools import partial
     from multiprocessing import Pool
 
+    if not video_fpaths:
+        print('No videos were found. Please check your paths\n')
+        return
+
     print('Saving labeled videos...')
 
     bodyparts = get_markers()
     bodyparts2connect = get_skeleton() if draw_skeleton else None
-
-    if not video_fpaths:
-        print('No videos were found. Please check your paths\n')
-        return
 
     if out_dir is None:
         out_dir = os.path.relpath(os.path.dirname(video_fpaths[0]), os.getcwd())
@@ -267,6 +267,6 @@ def create_labeled_videos(video_fpaths, videotype='mp4', codec='mp4v', outputfra
     func = partial(proc_video, out_dir, bodyparts, codec, bodyparts2connect, outputframerate, draw_skeleton, pcutoff, dotsize, colormap, skeleton_color)
 
     with Pool(min(os.cpu_count(), len(video_fpaths))) as pool:
-        pool.map(func,video_fpaths)
+        pool.map(func, video_fpaths)
 
     print('Done!\n')
