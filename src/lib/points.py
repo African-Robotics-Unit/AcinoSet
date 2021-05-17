@@ -91,8 +91,7 @@ def common_image_points(pts_1, fnames_1, pts_2, fnames_2):
     return img_pts_1, img_pts_2, fnames
 
 
-def EOM_curve_fit(pts_3d, frames=None, fit_order=3, plot=False, fig_title='Curve Fit'):
-
+def EOM_curve_fit(pts_3d, frames=None, fit_order=3):
     from sympy import lambdify, diff
     from scipy.optimize import curve_fit
 
@@ -129,25 +128,5 @@ def EOM_curve_fit(pts_3d, frames=None, fit_order=3, plot=False, fig_title='Curve
     for ax in range(num_axes):
         fit[:, ax]       = fit_func(frames, *func_params[ax, :])
         fit_deriv[:, ax] = fit_func_deriv(frames, *func_params[ax, 1:])
-
-    if plot:
-        import matplotlib.pyplot as plt
-
-        titles  = ['X', 'Y', 'Z']
-        frames += 1 # frames are 1 based indices
-        ordinal = str(fit_order) + {1: 'st', 2: 'nd', 3: 'rd'}.get(fit_order % 10 * (fit_order % 100 not in [11,12,13]), 'th') # https://stackoverflow.com/a/45416102
-
-        fig, axs = plt.subplots(1, num_axes, figsize=(num_axes*6,5))
-        for ax in range(num_axes):
-            fig.suptitle(fig_title)
-            axs[ax].scatter(frames, pts_3d[:, ax], s=2)
-            axs[ax].plot(frames, pts_3d[:, ax])
-            axs[ax].plot(frames, fit[:, ax])
-            axs[ax].set_ylim(fit[:, ax].min()-5, fit[:, ax].max()+5)
-            axs[ax].set_xlabel('Frames')
-            axs[ax].set_ylabel('Position (m)')
-            axs[ax].legend(['Original', f'{ordinal} Order Fit'])
-            axs[ax].set_title(titles[ax] + ' Axis')
-        plt.show(block=False)
 
     return fit, fit_deriv

@@ -18,7 +18,7 @@ from .calib import calibrate_camera, calibrate_fisheye_camera, \
     project_points, project_points_fisheye, \
     _calibrate_pairwise_extrinsics
 from .plotting import plot_calib_board, plot_optimized_states, \
-    plot_extrinsics, Cheetah
+    plot_extrinsics, plot_marker_3d, Cheetah
 
 
 def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len, window_size=11, remove_unused_images=False):
@@ -35,28 +35,27 @@ def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len,
     save_points(out_fpath, saved_points, saved_fnames, board_shape, board_edge_len, cam_res)
 
 
-def initialize_marker_3d(pts_2d_df, marker, k_arr, d_arr, r_arr, t_arr, dlc_thresh_step=0.01, **kwargs):
+def initialize_marker_3d(pts_2d_df, marker, k_arr, d_arr, r_arr, t_arr, dlc_thresh_step=0.01, plot=False, **kwargs):
     # when curve_fit can handle missing data/nans (see https://github.com/scipy/scipy/issues/11841), change this code to
     # increase dlc_thresh while num_frames >= frac*tot_frames where frac = 0.7 or something similar
 
     # determine highest usable dlc_thresh
-    dlc_thresh = -dlc_thresh_step
+    dlc_thresh = dlc_thresh_step
     frames     = pts_2d_df['frame'].unique()
     tot_frames = num_frames = len(frames)
 
     # frac = 0.7
     # while num_frames >= frac*tot_frames
     while num_frames == tot_frames:
-        dlc_thresh += dlc_thresh_step
         pts_3d_df = get_pairwise_3d_points_from_df(
             pts_2d_df[pts_2d_df['likelihood'] > dlc_thresh],
             k_arr, d_arr, r_arr, t_arr, triangulate_points_fisheye,
             verbose=False
         )
-
         num_frames = pts_3d_df[pts_3d_df['marker']==marker]['frame'].size
+        dlc_thresh += dlc_thresh_step
 
-    dlc_thresh -= dlc_thresh_step
+    dlc_thresh -= 2*dlc_thresh_step
 
     print(f"Initializing {marker}'s 3D points using an interim dlc_thresh of {dlc_thresh:.2f}")
 
@@ -71,7 +70,17 @@ def initialize_marker_3d(pts_2d_df, marker, k_arr, d_arr, r_arr, t_arr, dlc_thre
     for frame, *pt_3d in pts_3d_df[pts_3d_df['marker']==marker][['frame', 'x', 'y', 'z']].values:
         pts_3d[int(frame) - frames[0], :] = pt_3d
 
-    return EOM_curve_fit(pts_3d, frames=frames, fig_title=f'Fitted curves to initialize {marker}', **kwargs)
+    fit, fit_deriv = EOM_curve_fit(pts_3d, frames=frames, **kwargs)
+
+    if plot:
+        import inspect
+        fit_order = inspect.signature(EOM_curve_fit).parameters['fit_order'].default
+        fit_order = kwargs.get('fit_order', fit_order)
+        ordinal   = {1: 'st', 2: 'nd', 3: 'rd'}.get(fit_order % 10 * (fit_order not in [11,12,13]), 'th') # works up to 110 - https://stackoverflow.com/a/45416102
+        title     = str(fit_order) + ordinal + ' Order Fit for ' + marker.capitalize()
+        plot_marker_3d(pts_3d, frames, fit, title)
+
+    return fit, fit_deriv
 
 
 # ==========  CALIBRATION  ==========
