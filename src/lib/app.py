@@ -73,8 +73,8 @@ def initialize_marker_3d(pts_2d_df, marker, k_arr, d_arr, r_arr, t_arr, dlc_thre
     fit, fit_deriv = EOM_curve_fit(pts_3d, frames=frames, **kwargs)
 
     if plot:
-        import inspect
-        fit_order = inspect.signature(EOM_curve_fit).parameters['fit_order'].default
+        from inspect import signature
+        fit_order = signature(EOM_curve_fit).parameters['fit_order'].default
         fit_order = kwargs.get('fit_order', fit_order)
         ordinal   = {1: 'st', 2: 'nd', 3: 'rd'}.get(fit_order % 10 * (fit_order not in [11,12,13]), 'th') # works up to 110 - https://stackoverflow.com/a/45416102
         title     = str(fit_order) + ordinal + ' Order Fit for ' + marker.capitalize()
