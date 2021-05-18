@@ -172,7 +172,7 @@ def bundle_adjust_points_and_extrinsics(points_2d, points_3d, point_3d_indices, 
                         args=(n_cams, n_points, point_3d_indices, camera_indices, k_arr, d_arr, points_2d, project_func),
                         max_nfev=1000)
     t1 = time()
-    print('\nOptimization took {0:.2f} seconds'.format(t1 - t0))
+    print(f'\nOptimization took {t1-t0:.2f} seconds')
     obj_pts, r_arr, t_arr = params_to_points_extrinsics(res.x, n_cams, n_points)
     residuals = dict(before=f0, after=res.fun)
     return obj_pts, r_arr, t_arr, residuals
@@ -189,7 +189,7 @@ def bundle_adjust_points_only(points_2d, points_3d, point_3d_indices, camera_ind
     res = least_squares(cost_func_points_only, x0, jac_sparsity=A, verbose=2, x_scale='jac', ftol=1e-15, method='trf', loss='cauchy', f_scale=f_scale,
                         args=(n_points, point_3d_indices, camera_indices, k_arr, d_arr, r_arr, t_arr, points_2d, project_func), max_nfev=500)
     t1 = time()
-    print('\nOptimization took {0:.2f} seconds'.format(t1 - t0))
+    print(f'\nOptimization took {t1-t0:.2f} seconds')
     residuals = dict(before=f0, after=res.fun)
     obj_pts = res.x.reshape((n_points, 3))
     return obj_pts, residuals

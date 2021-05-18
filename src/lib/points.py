@@ -89,3 +89,44 @@ def common_image_points(pts_1, fnames_1, pts_2, fnames_2):
     img_pts_1 = np.array(img_pts_1, dtype=np.float32)
     img_pts_2 = np.array(img_pts_2, dtype=np.float32)
     return img_pts_1, img_pts_2, fnames
+
+
+def EOM_curve_fit(pts_3d, frames=None, fit_order=3):
+    from sympy import lambdify, diff
+    from scipy.optimize import curve_fit
+
+    # equation of motion series is s_new = s + v*t + 1/2*a*t**2 + ... + 1/n!*x*t**n
+    # here we use fit = a + b*t + c*t**2 + ... + var*t**n
+
+    assert 0 < fit_order < 19 and isinstance(fit_order, int), 'fit_order must be an integer from 1 to 18'
+
+    if frames is None:
+        frames_new = np.arange(len(pts_3d))
+
+    num_axes = pts_3d.shape[1] # x, y, z
+    n = fit_order + 1
+
+    syms     = ['t', 'a'] # independent var & zeroth order term in series
+    nth_term = f'var*{syms[0]}**order' # general expression for nth term in series
+
+    fit_func_str = syms[1]
+    func_params  = np.zeros((num_axes, 1)) # store the fit params for every axis
+    # loop from lowest to highest order fit so that lower can be used to initialise higher
+    for order in range(1, n): # skip zeroth order fit func because it's already in fit_func_str
+        syms.append(chr(ord(syms[-1]) + 1)) # append next letter
+        fit_func_str += ' + ' + nth_term.replace('var', syms[-1]).replace('order', str(order)) # add new nth term
+        fit_func = lambdify(syms, fit_func_str)
+
+        func_params = np.append(func_params, np.zeros((num_axes, 1)), axis=1) # concat zeros to initialize new higher order fit_func
+        for ax in range(num_axes):
+            func_params[ax, :], _ = curve_fit(fit_func, frames, pts_3d[:, ax], p0=func_params[ax, :], method='trf', loss='cauchy') # initialize with previous fit params
+
+    syms.remove(syms[1]) # remove zeroth/constant term
+    fit_func_deriv = lambdify(syms, diff(fit_func_str, syms[0]))
+
+    fit, fit_deriv = np.full(pts_3d.shape, np.nan), np.full(pts_3d.shape, np.nan)
+    for ax in range(num_axes):
+        fit[:, ax]       = fit_func(frames, *func_params[ax, :])
+        fit_deriv[:, ax] = fit_func_deriv(frames, *func_params[ax, 1:])
+
+    return fit, fit_deriv

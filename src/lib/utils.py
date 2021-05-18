@@ -32,7 +32,7 @@ def load_manual_points(fpath, verbose=True):
         points = np.array(data['points'])
         fnames = []
         for i in data['frame_idx']:
-            fnames.append('img{}.jpg'.format(str(i).zfill(5)))
+            fnames.append(f'img{str(i).zfill(5)}.jpg')
         cam_res = tuple(data['camera_resolution'])
     if verbose:
         print(f'Loaded manual points from {fpath}\n')
@@ -247,17 +247,18 @@ def create_board_object_pts(board_shape: Tuple[int, int], square_edge_length: np
     return object_pts
 
 
-def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, triangulate_func):
+def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, triangulate_func, verbose=True):
     n_cams = len(k_arr)
     camera_pairs = [[i % n_cams, (i+1) % n_cams] for i in range(n_cams)]
     df_pairs = pd.DataFrame(columns=['x','y','z'])
-    #get pairwise estimates
+    # get pairwise estimates
     for cam_a, cam_b in camera_pairs:
         d0 = points_2d_df[points_2d_df['camera']==cam_a]
         d1 = points_2d_df[points_2d_df['camera']==cam_b]
         intersection_df = d0.merge(d1, how='inner', on=['frame','marker'], suffixes=('_a', '_b'))
         if intersection_df.shape[0] > 0:
-            print(f'Found {intersection_df.shape[0]} pairwise points between camera {cam_a} and {cam_b}')
+            if verbose:
+                print(f'Found {intersection_df.shape[0]} pairwise points between camera {cam_a} and {cam_b}')
             cam_a_points = np.array(intersection_df[['x_a','y_a']], dtype=np.float).reshape((-1,1,2))
             cam_b_points = np.array(intersection_df[['x_b','y_b']], dtype=np.float).reshape((-1,1,2))
             points_3d = triangulate_func(cam_a_points, cam_b_points,
@@ -268,8 +269,10 @@ def get_pairwise_3d_points_from_df(points_2d_df, k_arr, d_arr, r_arr, t_arr, tri
             intersection_df['z'] = points_3d[:, 2]
             df_pairs = pd.concat([df_pairs, intersection_df], ignore_index=True, join='outer', sort=False)
         else:
-            print(f'No pairwise points between camera {cam_a} and {cam_b}')
+            if verbose:
+                print(f'No pairwise points between camera {cam_a} and {cam_b}')
 
-    print()
+    if verbose:
+        print()
     points_3d_df = df_pairs[['frame', 'marker', 'x','y','z']].groupby(['frame','marker']).mean().reset_index()
     return points_3d_df

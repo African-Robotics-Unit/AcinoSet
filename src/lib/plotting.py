@@ -320,6 +320,32 @@ def plot_extrinsics(scene_fpath, pts_2d, fnames, triangulate_func, manual_points
     scene.show()
 
 
+def plot_marker_3d(pts_3d, frames=None, fitted_pts_3d=None, fig_title='3D points'):
+    if frames is None:
+        frames = np.arange(len(pts_3d))
+
+    frames += 1 # frames are 1 based indices
+    num_axes = pts_3d.shape[1]
+
+    fig, axs = plt.subplots(1, num_axes, figsize=(num_axes*6,5))
+    fig.suptitle(fig_title)
+    for ax in range(num_axes):
+        axs[ax].plot(frames, pts_3d[:, ax], 'o-', markersize=2)
+        axs[ax].set_xlabel('Frames')
+        axs[ax].set_ylabel('Position (m)')
+        axs[ax].set_title(chr(ord('X') + ax) + ' Axis')
+
+    if fitted_pts_3d is not None:
+        for ax in range(num_axes):
+            err = pts_3d[:, ax] - fitted_pts_3d[:, ax]
+            pad = 2*err.std() # 95%
+            axs[ax].plot(frames, fitted_pts_3d[:, ax])
+            axs[ax].set_ylim(fitted_pts_3d[:, ax].min() - pad, fitted_pts_3d[:, ax].max() + pad)
+            axs[ax].legend(['Original', 'Curve Fit'])
+
+    plt.show(block=False)
+
+
 def plot_optimized_states(x, smoothed_x=None, mplstyle_fpath=None):
     x = np.array(x)
     if smoothed_x is not None:
