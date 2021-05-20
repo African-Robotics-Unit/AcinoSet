@@ -20,14 +20,14 @@ def draw_text(img, text, move_text_lower_pixels=0, fontColor = [255]*3):
                 fontColor,
                 lineType)
 
-    
+
 def get_frames(vid_fpath, frame_output_dir):
     cap = cv2.VideoCapture(vid_fpath)
     if cap.isOpened():
         winname = vid_fpath
         cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
         go_next = True
-        while cv2.getWindowProperty(winname, cv2.WND_PROP_VISIBLE) > 0:
+        while cv2.getWindowProperty(winname, cv2.WND_PROP_AUTOSIZE) != -1: # cv2.WND_PROP_VISIBLE doesn't work as it should for some reason
             if go_next:
                 ret, frame = cap.read()
 
@@ -45,7 +45,7 @@ def get_frames(vid_fpath, frame_output_dir):
             elif key == ord(','):
                 cap.set(cv2.CAP_PROP_POS_FRAMES, curr_frame - 2)
             elif key == ord('s'):
-                cv2.imwrite(os.path.join(frame_output_dir, f'img{int(curr_frame):05}.jpg'), frame)
+                cv2.imwrite(os.path.join(frame_output_dir, f'img{int(curr_frame):05}.png'), frame, [cv2.IMWRITE_PNG_COMPRESSION, 6])
             elif key == ord('q'):
                 break
             else:

@@ -32,7 +32,7 @@ def load_manual_points(fpath, verbose=True):
         points = np.array(data['points'])
         fnames = []
         for i in data['frame_idx']:
-            fnames.append(f'img{str(i).zfill(5)}.jpg')
+            fnames.append(f'img{i:05}.png')
         cam_res = tuple(data['camera_resolution'])
     if verbose:
         print(f'Loaded manual points from {fpath}\n')
