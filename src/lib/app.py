@@ -16,9 +16,9 @@ from .calib import calibrate_camera, calibrate_fisheye_camera, \
     create_undistort_point_function, create_undistort_fisheye_point_function, \
     triangulate_points, triangulate_points_fisheye, \
     project_points, project_points_fisheye, \
-    _calibrate_pairwise_extrinsics
-from .plotting import plot_calib_board, plot_optimized_states, \
-    plot_extrinsics, plot_marker_3d, Cheetah
+    _calibrate_pairwise_extrinsics, calculate_rmse_pairwise
+from .plotting import plot_calib_board, plot_optimized_states, plot_extrinsics_3d, \
+    plot_3d_marker_as_2d, plot_pairwise_errors, Cheetah
 
 
 def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len, window_size=11, remove_unused_images=False):
@@ -78,7 +78,7 @@ def initialize_marker_3d(pts_2d_df, marker, k_arr, d_arr, r_arr, t_arr, dlc_thre
         fit_order = kwargs.get('fit_order', fit_order)
         ordinal   = {1: 'st', 2: 'nd', 3: 'rd'}.get(fit_order % 10 * (fit_order not in [11,12,13]), 'th') # works up to 110 - https://stackoverflow.com/a/45416102
         title     = str(fit_order) + ordinal + ' Order Fit for ' + marker.capitalize()
-        plot_marker_3d(pts_3d, frames, fit, title)
+        plot_3d_marker_as_2d(pts_3d, frames, fit, title)
 
     return fit, fit_deriv
 
@@ -104,11 +104,44 @@ def calibrate_fisheye_intrinsics(points_fpath, out_fpath):
 
 
 def calibrate_standard_extrinsics_pairwise(camera_fpaths, points_fpaths, out_fpath, dummy_scene_fpath=None, manual_points_fpath=None):
-    _calibrate_pairwise_extrinsics(calibrate_pair_extrinsics, camera_fpaths, points_fpaths, out_fpath,dummy_scene_fpath, manual_points_fpath)
+    k_arr, d_arr, r_arr, t_arr = _calibrate_pairwise_extrinsics(calibrate_pair_extrinsics, camera_fpaths, points_fpaths, out_fpath, dummy_scene_fpath, manual_points_fpath)
+    return np.array(k_arr), np.array(d_arr), np.array(r_arr), np.array(t_arr)
 
 
 def calibrate_fisheye_extrinsics_pairwise(camera_fpaths, points_fpaths, out_fpath, dummy_scene_fpath=None, manual_points_fpath=None):
-    _calibrate_pairwise_extrinsics(calibrate_pair_extrinsics_fisheye, camera_fpaths, points_fpaths, out_fpath, dummy_scene_fpath, manual_points_fpath)
+    k_arr, d_arr, r_arr, t_arr = _calibrate_pairwise_extrinsics(calibrate_pair_extrinsics_fisheye, camera_fpaths, points_fpaths, out_fpath, dummy_scene_fpath, manual_points_fpath)
+    return np.array(k_arr), np.array(d_arr), np.array(r_arr), np.array(t_arr)
+
+
+def _calib_reprojection_errors(triangulate_func, project_func, points_fpaths, cam_names, k_arr, d_arr, r_arr, t_arr, out_fpath):
+    pts_2d, fnames = [], []
+    for i in range(len(points_fpaths)):
+        img_pts, frame_names, *_ = load_points(points_fpaths[i])
+        pts_2d.append(img_pts)
+        fnames.append(frame_names)
+
+    rms_errors, fname = calculate_rmse_pairwise(triangulate_func, project_func, pts_2d, fnames, k_arr, d_arr, r_arr, t_arr)
+    print('Plotting reprojection errors...')
+    plot_calib_reprojection_errors(rms_errors, fnames, cam_names, out_fpath)
+
+    manual_pts_fpath = os.path.join(os.path.dirname(points_fpaths[0]), 'manual_points.json')
+    if os.path.exists(manual_pts_fpath):
+        print("Plotting manual points' reprojection errors...")
+        pts_2d, fnames, _ = load_manual_points(manual_pts_fpath)
+        pts_2d = pts_2d.swapaxes(0, 1)
+        fnames = [fnames]*len(pts_2d)
+
+        rms_errors, fname = calculate_rmse_pairwise(triangulate_func, project_func, pts_2d, fnames, k_arr, d_arr, r_arr, t_arr)
+        _, ext = os.path.splitext(out_fpath)
+        plot_calib_reprojection_errors(rms_errors, fnames, cam_names, out_fpath.replace(ext, '_manual_points' + ext))
+
+
+def calib_reprojection_errors(points_fpaths, cam_names, k_arr, d_arr, r_arr, t_arr, out_fpath=None):
+    _calib_reprojection_errors(triangulate_points, project_points, points_fpaths, cam_names, k_arr, d_arr, r_arr, t_arr, out_fpath)
+
+
+def calib_reprojection_errors_fisheye(points_fpaths, cam_names, k_arr, d_arr, r_arr, t_arr, out_fpath=None):
+    _calib_reprojection_errors(triangulate_points_fisheye, project_points_fisheye, points_fpaths, cam_names, k_arr, d_arr, r_arr, t_arr, out_fpath)
 
 
 # ==========  SBA  ==========
@@ -160,6 +193,13 @@ def plot_points_fisheye_undistort(points_fpath, camera_fpath):
     plot_calib_board(undistorted_points, board_shape, cam_res)
 
 
+def plot_calib_reprojection_errors(rms_errors, fnames, cam_names, out_fpath=None):
+    fig, axs = plot_pairwise_errors(rms_errors, fnames, cam_names)
+    if out_fpath is not None:
+        fig.savefig(out_fpath, transparent=True)
+        print(f'Saved {out_fpath}\n')
+
+
 def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
     *_, scene_fpath = find_scene_file(data_dir, scene_fname, verbose=False)
     points_dir = os.path.join(os.path.dirname(scene_fpath), 'points')
@@ -176,7 +216,7 @@ def plot_scene(data_dir, scene_fname=None, manual_points_only=False, **kwargs):
             pts_2d.append(img_pts)
             frames.append(img_names)
 
-    plot_extrinsics(scene_fpath, pts_2d, frames, triangulate_points_fisheye, manual_points_only, **kwargs)
+    plot_extrinsics_3d(scene_fpath, pts_2d, frames, triangulate_points_fisheye, manual_points_only, **kwargs)
 
 
 def plot_cheetah_states(states, smoothed_states=None, out_fpath=None, mplstyle_fpath=None):

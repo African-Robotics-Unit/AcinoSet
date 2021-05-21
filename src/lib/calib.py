@@ -393,3 +393,28 @@ def _calibrate_pairwise_extrinsics(
 
     r_arr, t_arr = fix_skew_scene(cams, r_arr, t_arr)
     save_scene(out_fpath, k_arr, d_arr, r_arr, t_arr, cam_res)
+    return k_arr, d_arr, r_arr, t_arr
+
+
+def calculate_rmse_pairwise(triangulate_func, project_func, img_pts, fnames, k_arr, d_arr, r_arr, t_arr):
+    n_cams = len(k_arr)
+    assert len(img_pts) == n_cams
+
+    rms_errs = []
+    for n in range(n_cams):
+        rms_errs.append([])
+        m = (n+1) % n_cams
+        *pts_2d, common_fnames = common_image_points(img_pts[n], fnames[n], img_pts[m], fnames[m])
+        if len(common_fnames):
+            fnames[n] = common_fnames
+            pts_2d = np.reshape(pts_2d, [len(pts_2d), len(pts_2d[0]), -1, 2]) # n cams, m frames, k image points per frame, 2 dims per image point
+            pts_3d = triangulate_func(pts_2d[0], pts_2d[1], k_arr[n], d_arr[n], r_arr[n], t_arr[n], k_arr[m], d_arr[m], r_arr[m], t_arr[m])
+            for k, l in enumerate([n, m]):
+                reprojected_pts = project_func(pts_3d, k_arr[l], d_arr[l], r_arr[l], t_arr[l]).reshape(pts_2d[k].shape)
+                err = np.linalg.norm(pts_2d[k] - reprojected_pts, axis=2)
+                rms_errs[n].append(np.sqrt(np.mean(err**2, axis=1)))
+        else:
+            rms_errs[n] = [[], []]
+            fnames[n] = []
+
+    return rms_errs, fnames

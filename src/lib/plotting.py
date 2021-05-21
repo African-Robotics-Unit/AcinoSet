@@ -12,7 +12,7 @@ from .misc import get_pose_params
 from .points import common_image_points
 from .utils import create_board_object_pts, load_scene
 
-plt.style.use(os.path.join('/configs', 'mplstyle.yaml'))
+plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 pg.setConfigOptions(antialias=True)
 
 
@@ -293,7 +293,29 @@ class Cheetah(Animation):
         self.show()
 
 
-def plot_extrinsics(scene_fpath, pts_2d, fnames, triangulate_func, manual_points_only=False, **kwargs):
+def plot_pairwise_errors(errs, fnames, cams):
+    import matplotlib.ticker as mticker # need to use this to avoid error message
+    n_cams = len(cams)
+    assert len(errs) == n_cams
+
+    max_frames = max([len(names) for names in fnames])
+
+    fig_shape = n_cams, len(errs[0]) # n cams, 2
+    fig_size = (fig_shape[1]*max_frames*0.2, fig_shape[0]*5)
+    fig, axs = plt.subplots(fig_shape[0], fig_shape[1], figsize=fig_size)
+    for i in range(fig_shape[0]):
+        fnames[i] = [os.path.splitext(img_name)[0] for img_name in fnames[i]]
+        for j in range(fig_shape[1]):
+            axs[i, j].bar(fnames[i], errs[i][j])
+            axs[i, j].set_ylabel('RMSE (pixels)')
+            axs[i, j].xaxis.set_major_locator(mticker.FixedLocator(axs[i, j].get_xticks()))
+            axs[i, j].set_xticklabels(fnames[i], rotation=90)
+            axs[i, j].set_title(f'Cam {cams[(i+j) % n_cams]} in cam pair {cams[i]} & {cams[(i+1) % n_cams]}')
+    plt.show(block=False)
+    return fig, axs
+
+
+def plot_extrinsics_3d(scene_fpath, pts_2d, fnames, triangulate_func, manual_points_only=False, **kwargs):
     scene = Scene(scene_fpath, **kwargs)
 
     colors = [[1,0,0],                        # red: cam pair 0&1
@@ -320,7 +342,7 @@ def plot_extrinsics(scene_fpath, pts_2d, fnames, triangulate_func, manual_points
     scene.show()
 
 
-def plot_marker_3d(pts_3d, frames=None, fitted_pts_3d=None, fig_title='3D points'):
+def plot_3d_marker_as_2d(pts_3d, frames=None, fitted_pts_3d=None, fig_title='3D points'):
     if frames is None:
         frames = np.arange(len(pts_3d))
 
