@@ -12,7 +12,7 @@ from .misc import get_pose_params
 from .points import common_image_points
 from .utils import create_board_object_pts, load_scene
 
-plt.style.use(os.path.join('/configs', 'mplstyle.yaml'))
+plt.style.use(os.path.join('..', 'configs', 'mplstyle.yaml'))
 pg.setConfigOptions(antialias=True)
 
 
