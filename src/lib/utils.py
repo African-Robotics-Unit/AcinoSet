@@ -221,38 +221,49 @@ def save_optimised_cheetah(positions, out_fpath, extra_data=None, for_matlab=Fal
         #     df.to_csv(os.path.splitext(fpath)[0] + ".csv")
         pass
 
-
-def save_3d_cheetah_as_2d(positions_3d, out_dir, scene_fpath, bodyparts, project_func, start_frame, save_as_csv=True, out_fname=None):
+def save_3d_cheetah_as_2d(positions_3d_arr,
+                          out_dir,
+                          scene_fpath,
+                          bodyparts,
+                          project_func,
+                          start_frame,
+                          save_as_csv=True,
+                          out_fname=None):
     assert os.path.dirname(os.path.dirname(scene_fpath)) in out_dir, 'scene_fpath does not belong to the same parent folder as out_dir'
 
-    video_fpaths = sorted(glob(os.path.join(out_dir, 'cam[1-9].mp4'))) # check current dir for videos
+    video_fpaths = sorted(glob(os.path.join(out_dir, 'cam[1-9].mp4')))  # check current dir for videos
     if not video_fpaths:
-        video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir), 'cam[1-9].mp4'))) # check parent dir for videos
+        video_fpaths = sorted(glob(os.path.join(os.path.dirname(out_dir),
+                                                'cam[1-9].mp4')))  # check parent dir for videos
 
     if video_fpaths:
         k_arr, d_arr, r_arr, t_arr, cam_res = load_scene(scene_fpath, verbose=False)
-        assert len(k_arr)==len(video_fpaths)
+        assert len(k_arr) == len(video_fpaths)
 
-        xyz_labels = ['x', 'y', 'likelihood'] # same format as DLC
+        xyz_labels = ['x', 'y', 'likelihood']  # same format as DLC
         pdindex = pd.MultiIndex.from_product([bodyparts, xyz_labels], names=['bodyparts', 'coords'])
-
-        positions_3d = np.array(positions_3d)
-        n_frames = len(positions_3d)
+        if not isinstance(positions_3d_arr, list):
+            positions_3d_arr = [positions_3d_arr] * len(video_fpaths)
 
         out_fname = os.path.basename(out_dir) if out_fname is None else out_fname
 
         for i in range(len(video_fpaths)):
-            projections = project_func(positions_3d, k_arr[i], d_arr[i], r_arr[i], t_arr[i])
-            out_of_range_indices = np.where((projections > cam_res) | (projections < [0]*2))[0]
+            position_3d = np.array(positions_3d_arr[i])
+            n_frames = len(position_3d)
+
+            projections = project_func(position_3d, k_arr[i], d_arr[i], r_arr[i], t_arr[i])
+            out_of_range_indices = np.where((projections > cam_res) | (projections < [0] * 2))[0]
             projections[out_of_range_indices] = np.nan
 
-            data = np.full(positions_3d.shape, np.nan)
-            data[:, :, 0:2] = projections.reshape((n_frames,-1, 2))
+            data = np.full(position_3d.shape, np.nan)
+            data[:, :, 0:2] = projections.reshape((n_frames, -1, 2))
 
             cam_name = os.path.splitext(os.path.basename(video_fpaths[i]))[0]
             fpath = os.path.join(out_dir, cam_name + '_' + out_fname + '.h5')
 
-            df = pd.DataFrame(data.reshape((n_frames, -1)), columns=pdindex, index=range(start_frame, start_frame+n_frames))
+            df = pd.DataFrame(data.reshape((n_frames, -1)),
+                              columns=pdindex,
+                              index=range(start_frame, start_frame + n_frames))
             if save_as_csv:
                 df.to_csv(os.path.splitext(fpath)[0] + '.csv')
             df.to_hdf(fpath, f'{out_fname}_df', format='table', mode='w')

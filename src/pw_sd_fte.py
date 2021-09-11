@@ -49,8 +49,10 @@ def metrics(
     test_data = [loc.capitalize() for loc in data_location]
     gt_name = str.join('', test_data)
     gt_name = gt_name.replace('Top', '').replace('Bottom', '')
+
     try:
-        points_2d_df = utils.load_dlc_points_as_df(os.path.join(root_dir, 'gt_labels', gt_name), verbose=False)
+        gt_points_fpaths = sorted(glob(os.path.join(os.path.join(root_dir, 'gt_labels', gt_name), '*.h5')))
+        points_2d_df = utils.load_dlc_points_as_df(gt_points_fpaths, verbose=False)
     except FileNotFoundError:
         print('No ground truth labels for this test.')
         points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
