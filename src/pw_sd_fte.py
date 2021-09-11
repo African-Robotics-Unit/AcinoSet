@@ -47,10 +47,10 @@ def metrics(
     markers = misc.get_markers()
     data_location = data_path.split('/')
     test_data = [loc.capitalize() for loc in data_location]
-    gt_data = str.join('', test_data)
-    gt_data = gt_data.replace('Top', '').replace('Bottom', '')
+    gt_name = str.join('', test_data)
+    gt_name = gt_name.replace('Top', '').replace('Bottom', '')
     try:
-        points_2d_df = pd.read_csv(os.path.join('/Users/zico/msc/data/gt_labels', gt_data, f'{gt_data}.csv'))
+        points_2d_df = utils.load_dlc_points_as_df(os.path.join(root_dir, 'gt_labels', gt_name), verbose=False)
     except FileNotFoundError:
         print('No ground truth labels for this test.')
         points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
@@ -92,7 +92,7 @@ def metrics(
         num_included_meas[m] = 100.0 * (((marker_meas_weights != 0.0).sum()) / len(marker_meas_weights))
         temp_dist = []
         for k, df in px_errors.items():
-            temp_dist += df.query(f'marker == '{m}'')['pixel_residual'].tolist()
+            temp_dist += df.query(f'marker == "{m}"')['pixel_residual'].tolist()
         marker_errors_2d[m] = np.asarray(list(map(float, temp_dist)))
 
     meas_stats_df = pd.DataFrame(num_included_meas, index=['%'])
@@ -157,7 +157,7 @@ def run(root_dir: str,
         # Automatically set start and end frame
         # defining the first and end frame as detecting all the markers on any of cameras simultaneously
         target_markers = misc.get_markers()
-        markers_condition = ' or '.join([f'marker=='{ref}'' for ref in target_markers])
+        markers_condition = ' or '.join([f'marker=="{ref}"' for ref in target_markers])
         num_marker = lambda i: len(
             filtered_points_2d_df.query(f'frame == {i} and ({markers_condition})')['marker'].unique())
 
