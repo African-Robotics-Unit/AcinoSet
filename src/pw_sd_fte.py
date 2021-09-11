@@ -25,13 +25,8 @@ def metrics(
     start_frame: int,
     end_frame: int,
     dlc_thresh: float = 0.5,
-    out_dir_prefix: str = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-
-    if out_dir_prefix:
-        out_dir = os.path.join(out_dir_prefix, data_path, 'fte_pw')
-    else:
-        out_dir = os.path.join(root_dir, data_path, 'fte_pw')
+    out_dir = os.path.join(root_dir, data_path, 'fte')
     # load DLC data
     data_dir = os.path.join(root_dir, data_path)
     dlc_dir = os.path.join(data_dir, 'dlc')
@@ -110,30 +105,13 @@ def metrics(
     return error_df, meas_stats_df
 
 
-def create_pose_functions(data_dir: str):
-    # symbolic vars
-    idx = misc.get_pose_params()
-    sym_list = sp.symbols(list(idx.keys()))
-    positions = misc.get_3d_marker_coords(sym_list)
-
-    func_map = {'sin': pyo.sin, 'cos': pyo.cos, 'ImmutableDenseMatrix': np.array}
-    pose_to_3d = sp.lambdify(sym_list, positions, modules=[func_map])
-    pos_funcs = []
-    for i in range(positions.shape[0]):
-        lamb = sp.lambdify(sym_list, positions[i, :], modules=[func_map])
-        pos_funcs.append(lamb)
-
-    # Save the functions to file.
-    utils.save_dill(os.path.join(data_dir, 'pose_3d_functions.pickle'), (pose_to_3d, pos_funcs))
-
-
 def run(root_dir: str,
         data_path: str,
         start_frame: int,
         end_frame: int,
         dlc_thresh: float,
         loss='redescending',
-        pairwise_included: int = 0,
+        enable_ppms: bool = False,
         enable_shutter_delay: bool = False,
         opt=None,
         generate_reprojection_videos: bool = False):
@@ -223,7 +201,7 @@ def run(root_dir: str,
         pose_to_3d, pos_funcs = utils.load_dill(os.path.join(root_dir, 'pose_3d_functions.pickle'))
     except FileNotFoundError:
         print('Lambdify pose functions and save to file for re-use in the future...')
-        create_pose_functions(root_dir)
+        _create_pose_functions(root_dir)
 
     pose_to_3d, pos_funcs = utils.load_dill(os.path.join(root_dir, 'pose_3d_functions.pickle'))
     idx = misc.get_pose_params()
@@ -396,7 +374,7 @@ def run(root_dir: str,
 
     # save parameters
     with open(os.path.join(out_dir, 'reconstruction_params.json'), 'w') as f:
-        json.dump(dict(start_frame=start_frame, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
+        json.dump(dict(start_frame=start_frame+1, end_frame=end_frame, dlc_thresh=dlc_thresh), f)
 
     print(f'Start frame: {start_frame}, End frame: {end_frame}, Frame rate: {fps}')
 
@@ -418,7 +396,7 @@ def run(root_dir: str,
     m.D2 = pyo.RangeSet(2)
     m.D3 = pyo.RangeSet(3)
     # Number of pairwise terms to include + the base measurement.
-    m.W = pyo.RangeSet(pairwise_included + 1 if pairwise_included <= 2 and pairwise_included >= 0 else 1)
+    m.W = pyo.RangeSet(3 if enable_ppms else 1)
 
     index_dict = misc.get_dlc_marker_indices()
     pair_dict = misc.get_pairwise_graph()
@@ -709,6 +687,21 @@ def run(root_dir: str,
 
     print('Done')
 
+def _create_pose_functions(data_dir: str):
+    # symbolic vars
+    idx = misc.get_pose_params()
+    sym_list = sp.symbols(list(idx.keys()))
+    positions = misc.get_3d_marker_coords(sym_list)
+
+    func_map = {'sin': pyo.sin, 'cos': pyo.cos, 'ImmutableDenseMatrix': np.array}
+    pose_to_3d = sp.lambdify(sym_list, positions, modules=[func_map])
+    pos_funcs = []
+    for i in range(positions.shape[0]):
+        lamb = sp.lambdify(sym_list, positions[i, :], modules=[func_map])
+        pos_funcs.append(lamb)
+
+    # Save the functions to file.
+    utils.save_dill(os.path.join(data_dir, 'pose_3d_functions.pickle'), (pose_to_3d, pos_funcs))
 
 def _save_error_dists(px_errors, output_dir: str) -> Tuple[float, float, float]:
     ratio = 0.5
