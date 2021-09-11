@@ -1,6 +1,8 @@
 import os
 import json
 import pickle
+import dill
+from typing import Dict
 import numpy as np
 import pandas as pd
 from glob import glob
@@ -12,6 +14,51 @@ from datetime import datetime
 
 
 # ========== LOAD FUNCTIONS ==========
+
+def save_pickle(filename: str, data: Dict) -> None:
+    """Saves dictionary as a pickle file to a user supplied destination directory.
+
+    Args:
+        filename: Full path to the directory and he filename for the pickle file.
+        data: The data to be saved.
+    """
+    with open(filename, "wb") as handle:
+        pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+def load_pickle(filename: str) -> Dict:
+    """Reads data from a pickle file.
+
+    Args:
+        filename: Full path to the pickle file.
+
+    Returns:
+        Read data into a dictionary.
+    """
+    with open(filename, "rb") as handle:
+        return pickle.load(handle)
+
+def save_dill(filename: str, data: Any) -> None:
+    """Saves dictionary as a pickle file to a user supplied destination directory using dill.
+
+    Args:
+        filename: Full path to the directory and he filename for the pickle file.
+        data: The data to be saved.
+    """
+    with open(filename, "wb") as handle:
+        dill.dump(data, handle, protocol=pickle.DEFAULT_PROTOCOL)
+
+
+def load_dill(filename: str) -> Dict:
+    """Reads data from a pickle file using dill.
+
+    Args:
+        filename: Full path to the pickle file.
+
+    Returns:
+        Read data into a dictionary.
+    """
+    with open(filename, "rb") as handle:
+        return dill.load(handle)
 
 def load_points(fpath, verbose=False):
     with open(fpath, 'r') as f:
