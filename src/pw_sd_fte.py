@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 plt.style.use(os.path.join('../configs', 'mechatronics_style.yaml'))
 
 
-def acinoset_comparison(root_dir) -> Dict:
+def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
     """
     Generates results for a subset of videos from AcinoSet for each method: FTE, SD-FTE, PW-FTE, PW-SD-FTE.
 
@@ -29,8 +29,11 @@ def acinoset_comparison(root_dir) -> Dict:
     Returns:
         results in a dictionary.
     """
-    data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "lily", "flick"),
-    os.path.join("2017_12_16", "bottom", "phantom", "flick2_1"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
+    if not use_3D_gt:
+        data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "lily", "flick"),
+        os.path.join("2017_12_16", "bottom", "phantom", "flick2_1"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
+    else:
+        data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "jules", "flick1")]
     frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
     dlc_thresh = 0.5
     # Initialise the Ipopt solver.
@@ -47,7 +50,7 @@ def acinoset_comparison(root_dir) -> Dict:
     optimiser.options["linear_solver"] = "ma86"
     optimiser.options["OF_ma86_scaling"] = "none"
 
-    results = {"fte": {}, "fte_sd": {}, "fte_pw": {}, "fte_sd_pw": {}}
+    results = {"FTE": {}, "SD-FTE": {}, "PW-FTE": {}, "PW-SD-FTE": {}}
     for i, data_path in enumerate(data_paths):
         for test in results.keys():
             # Run the optimisation
@@ -57,14 +60,15 @@ def acinoset_comparison(root_dir) -> Dict:
                 end_frame=frames[i][1],
                 dlc_thresh=dlc_thresh,
                 opt=optimiser,
-                enable_shutter_delay=True if "sd" in test else False,
-                enable_ppms=True if "pw" in test else False)
+                enable_shutter_delay=True if "SD" in test else False,
+                enable_ppms=True if "PW" in test else False)
             # Produce results
             results[test][data_path] = metrics(root_dir,
                                             data_path,
                                             start_frame=frames[i][0],
                                             end_frame=frames[i][1],
-                                            dlc_thresh=dlc_thresh)
+                                            dlc_thresh=dlc_thresh,
+                                            use_3D_gt=use_3D_gt)
     return results
 
 def metrics(
@@ -73,6 +77,7 @@ def metrics(
     start_frame: int,
     end_frame: int,
     dlc_thresh: float = 0.5,
+    use_3D_gt: bool = False,
 ) -> Tuple[float, float, float]:
     """
     Generate metrics for a particular reconstruction. Note, the `fte.pickle` needs to be generated prior to calling this function.
@@ -83,6 +88,7 @@ def metrics(
         start_frame: The start frame number. Note, this value is deducted by `-1` to compensate for `0` based indexing.
         end_frame: The end frame number.
         dlc_thresh: The DLC confidence score to filter 2D keypoints. Defaults to 0.5.
+        use_3D_gt: Flag to select 3D ground truth for evaluation. Defaults to False.
 
     Returns:
         A tuple consisting of the mean error [px], median error [px], and PCK [%].
@@ -112,8 +118,10 @@ def metrics(
     gt_name = gt_name.replace('Top', '').replace('Bottom', '')
 
     gt_points_fpaths = sorted(glob(os.path.join(os.path.join(root_dir, 'gt_labels', gt_name), '*.h5')))
-    if len(gt_points_fpaths) > 0:
+    if not use_3D_gt and len(gt_points_fpaths) > 0:
         points_2d_df = utils.load_dlc_points_as_df(gt_points_fpaths, verbose=False)
+    elif use_3D_gt:
+        points_2d_df = pd.read_csv(os.path.join(root_dir, 'gt_labels', gt_name, f"{gt_name}.csv"))
     else:
         print('No ground truth labels for this test.')
         points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
