@@ -19,13 +19,38 @@ import matplotlib.pyplot as plt
 plt.style.use(os.path.join('../configs', 'mechatronics_style.yaml'))
 
 
+def acinoset_comparison(root_dir) -> Dict:
+    data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "lily", "flick"),
+    os.path.join("2017_12_16", "bottom", "phantom", "flick2_1"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
+    frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
+    dlc_thresh = 0.5
+
+    results = {"fte": [], "fte_sd": [], "fte_pw": [], "fte_sd_pw": []}
+    for i, data_path in enumerate(data_paths):
+        for test in results.keys():
+            # Run the optimisation
+            run(root_dir,
+                data_path,
+                start_frame=frames[i][0],
+                end_frame=frames[i][1],
+                dlc_thresh=dlc_thresh,
+                enable_shutter_delay=True if "sd" in test else False,
+                enable_ppms=True if "pw" in test else False)
+            # Produce results
+            results[test].append(metrics(root_dir,
+                                    data_path,
+                                    start_frame=frames[i][0],
+                                    end_frame=frames[i][1],
+                                    dlc_thresh=dlc_thresh))
+    return results
+
 def metrics(
     root_dir: str,
     data_path: str,
     start_frame: int,
     end_frame: int,
     dlc_thresh: float = 0.5,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[float, float, float]:
     out_dir = os.path.join(root_dir, data_path, 'fte')
     # load DLC data
     data_dir = os.path.join(root_dir, data_path)
@@ -82,7 +107,7 @@ def metrics(
         points_3d_dfs.append(points_3d_df)
     px_errors = metric.residual_error(points_2d_df, points_3d_dfs, markers,
                                       (k_arr, d_arr, r_arr, t_arr, cam_res, n_cams))
-    _save_error_dists(px_errors, out_dir)
+    mean_error, med_error, pck = _save_error_dists(px_errors, out_dir)
 
     # Calculate the per marker error and save results.
     marker_errors_2d = dict.fromkeys(markers, [])
@@ -104,7 +129,7 @@ def metrics(
     error_df.to_csv(os.path.join(out_dir, 'reprojection_results.csv'))
     meas_stats_df.to_csv(os.path.join(out_dir, 'measurement_results.csv'))
 
-    return error_df, meas_stats_df
+    return mean_error, med_error, pck
 
 
 def run(root_dir: str,
