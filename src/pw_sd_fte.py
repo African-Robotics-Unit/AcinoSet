@@ -818,6 +818,7 @@ def _loss_function(residual: float, loss='redescending') -> float:
 if __name__ == '__main__':
     root_dir = os.path.join('/', 'data', 'dlc', 'to_analyse', 'cheetah_videos')
     results = acinoset_comparison(root_dir)
+    utils.save_pickle(os.path.join(root_dir, 'acinoset_comparison_results.pickle'), results)
     print(results)
     results_table = pd.DataFrame.from_dict({(i,j): results[i][j] for i in results.keys() for j in results[i].keys()}, orient='index')
     print(results_table)
