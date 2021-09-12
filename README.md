@@ -6,7 +6,9 @@ Daniel Joska, Liam Clark, Naoya Muramatsu, Ricardo Jericevich, Fred Nicolls, Ale
  AcinoSet is a dataset of free-running cheetahs in the wild that contains 119,490 frames of multi-view synchronized high-speed video footage, camera calibration files and 7,588 human-annotated frames. We utilize markerless animal pose estimation with DeepLabCut to provide 2D keypoints (in the 119K frames). Then, we use three methods that serve as strong baselines for 3D pose estimation tool development: traditional sparse bundle adjustment, an Extended Kalman Filter, and a trajectory optimization-based method we call Full Trajectory Estimation. The resulting 3D trajectories, human-checked 3D ground truth, and an interactive tool to inspect the data is also provided. We believe this dataset will be useful for a diverse range of fields such as ecology, robotics, biomechanics, as well as computer vision.
 
 ### AcinoSet code by:
-- [Liam Clark](https://github.com/LiamClarkZA) | [Ricardo Jericevich](https://github.com/@rickyjericevich) | [Daniel Joska](https://github.com/DJoska) | [Naoya Muramatsu](https://github.com/DenDen047)
+- [Liam Clark](https://github.com/LiamClarkZA) | [Ricardo Jericevich](https://github.com/@rickyjericevich) | [Daniel Joska](https://github.com/DJoska) | [Naoya Muramatsu](https://github.com/DenDen047) | [Zico da Silva](https://github.com/zicodasilva)
+
+For more information on our latest work on AcinoSet: [Improving 3D Pose Estimation of Cheetahs in the Wild](/docs/pw_sd_fte.md)
 
 ## Prerequisites
 
