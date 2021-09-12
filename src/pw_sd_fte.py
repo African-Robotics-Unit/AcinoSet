@@ -24,8 +24,21 @@ def acinoset_comparison(root_dir) -> Dict:
     os.path.join("2017_12_16", "bottom", "phantom", "flick2_1"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
     frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
     dlc_thresh = 0.5
+    # Initialise the Ipopt solver.
+    optimiser = SolverFactory("ipopt", executable="/home/zico/lib/ipopt/build/bin/ipopt")
+    # solver options
+    optimiser.options["print_level"] = 5
+    optimiser.options["max_iter"] = 400
+    optimiser.options["max_cpu_time"] = 10000
+    optimiser.options["Tol"] = 1e-1
+    optimiser.options["OF_print_timing_statistics"] = "yes"
+    optimiser.options["OF_print_frequency_time"] = 10
+    optimiser.options["OF_hessian_approximation"] = "limited-memory"
+    optimiser.options["OF_accept_every_trial_step"] = "yes"
+    optimiser.options["linear_solver"] = "ma86"
+    optimiser.options["OF_ma86_scaling"] = "none"
 
-    results = {"fte": [], "fte_sd": [], "fte_pw": [], "fte_sd_pw": []}
+    results = {"fte": {}, "fte_sd": {}, "fte_pw": {}, "fte_sd_pw": {}}
     for i, data_path in enumerate(data_paths):
         for test in results.keys():
             # Run the optimisation
@@ -34,14 +47,15 @@ def acinoset_comparison(root_dir) -> Dict:
                 start_frame=frames[i][0],
                 end_frame=frames[i][1],
                 dlc_thresh=dlc_thresh,
+                opt=optimiser,
                 enable_shutter_delay=True if "sd" in test else False,
                 enable_ppms=True if "pw" in test else False)
             # Produce results
-            results[test].append(metrics(root_dir,
-                                    data_path,
-                                    start_frame=frames[i][0],
-                                    end_frame=frames[i][1],
-                                    dlc_thresh=dlc_thresh))
+            results[test][data_path] = metrics(root_dir,
+                                            data_path,
+                                            start_frame=frames[i][0],
+                                            end_frame=frames[i][1],
+                                            dlc_thresh=dlc_thresh)
     return results
 
 def metrics(
@@ -799,3 +813,11 @@ def _loss_function(residual: float, loss='redescending') -> float:
         return residual**2
 
     return 0.0
+
+# ========= MAIN ========
+if __name__ == '__main__':
+    root_dir = os.path.join('/', 'data', 'dlc', 'to_analyse', 'cheetah_videos')
+    results = acinoset_comparison(root_dir)
+    print(results)
+    results_table = pd.DataFrame.from_dict({(i,j): results[i][j] for i in results.keys() for j in results[i].keys()}, orient='index')
+    print(results_table)
