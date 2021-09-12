@@ -20,6 +20,15 @@ plt.style.use(os.path.join('../configs', 'mechatronics_style.yaml'))
 
 
 def acinoset_comparison(root_dir) -> Dict:
+    """
+    Generates results for a subset of videos from AcinoSet for each method: FTE, SD-FTE, PW-FTE, PW-SD-FTE.
+
+    Args:
+        root_dir: The root directory where the videos are stored, along with the `pose_3d_functions.pickle` file, and `gt_labels` directory.
+
+    Returns:
+        results in a dictionary.
+    """
     data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "lily", "flick"),
     os.path.join("2017_12_16", "bottom", "phantom", "flick2_1"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
     frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
@@ -65,6 +74,19 @@ def metrics(
     end_frame: int,
     dlc_thresh: float = 0.5,
 ) -> Tuple[float, float, float]:
+    """
+    Generate metrics for a particular reconstruction. Note, the `fte.pickle` needs to be generated prior to calling this function.
+
+    Args:
+        root_dir: The root directory where the videos are stored.
+        data_path: Path to video set of interest.
+        start_frame: The start frame number. Note, this value is deducted by `-1` to compensate for `0` based indexing.
+        end_frame: The end frame number.
+        dlc_thresh: The DLC confidence score to filter 2D keypoints. Defaults to 0.5.
+
+    Returns:
+        A tuple consisting of the mean error [px], median error [px], and PCK [%].
+    """
     out_dir = os.path.join(root_dir, data_path, 'fte')
     # load DLC data
     data_dir = os.path.join(root_dir, data_path)
@@ -155,7 +177,22 @@ def run(root_dir: str,
         enable_ppms: bool = False,
         enable_shutter_delay: bool = False,
         opt=None,
-        generate_reprojection_videos: bool = False):
+        generate_reprojection_videos: bool = False) -> None:
+    """
+    Runs the FTE 3D reconstruction.
+
+    Args:
+        root_dir: The root directory where the videos are stored.
+        data_path: Path to video set of interest.
+        start_frame: The start frame number. Note, this value is deducted by `-1` to compensate for `0` based indexing.
+        end_frame: The end frame number.
+        dlc_thresh: The DLC confidence score to filter 2D keypoints. Defaults to 0.5.
+        loss: Select the loss function to use for the measurement cost, either squared loss or redecending. Defaults to 'redescending'.
+        enable_ppms: Flag to indicate if the pairwise pseudo-measurements should be incorporated into the optimisation. Defaults to False.
+        enable_shutter_delay: Flag to indicate if shutter delay correction should be performed. Defaults to False.
+        opt: A instance of the Pyomo optimiser. This is useful if you are calling this function in a loop; preventing re-initialisation of the optimiser. Defaults to None.
+        generate_reprojection_videos: Flag to enable the generation of 2D reprojection videos. Defaults to False.
+    """
     print('Prepare data - Start')
 
     t0 = time()
