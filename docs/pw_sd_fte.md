@@ -1,7 +1,6 @@
 # Improving 3D Pose Estimation of Cheetahs in the Wild
 - Upload ground truth used in the experiments and provide link to it here.
 - Provide example of how to run code.
-- Provide some extra qualitative results.
 
 ### Pairwise pseudo-measurement graph
 In this work, we decided to only generate PPMs from “intuitive” pairwise terms, i.e. infer the  location  of  a  keypoint  that  makes  kinematic  sense  with regard to the cheetah skeleton. The table below provides the base keypoint and it's corresponding PPMs.
@@ -32,3 +31,9 @@ r\_hip | r\_back\_knee | tail\_base
 r\_back\_knee | r\_hip | r\_back\_ankle
 r\_back\_ankle | r\_back\_knee | r\_hip
 r\_back\_paw | r\_back\_knee | r\_back\_ankle
+
+### Qualitative results
+
+2019\_03\_09/jules/flick2          | 2017\_08\_29/top/phantom/flick1\_1           |  Frame Examples
+:-------------------------:|:-------------------------:|:-------------------------:
+![](./images/qualitative-results.png) | ![](./images/qualitative-results-2.png) | ![](./images/stop-frame-qual.png)
