@@ -89,10 +89,10 @@ def metrics(
     gt_name = str.join('', test_data)
     gt_name = gt_name.replace('Top', '').replace('Bottom', '')
 
-    try:
-        gt_points_fpaths = sorted(glob(os.path.join(os.path.join(root_dir, 'gt_labels', gt_name), '*.h5')))
+    gt_points_fpaths = sorted(glob(os.path.join(os.path.join(root_dir, 'gt_labels', gt_name), '*.h5')))
+    if len(gt_points_fpaths) > 0:
         points_2d_df = utils.load_dlc_points_as_df(gt_points_fpaths, verbose=False)
-    except FileNotFoundError:
+    else:
         print('No ground truth labels for this test.')
         points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
         points_2d_df = points_2d_df[points_2d_df['likelihood'] > dlc_thresh]  # ignore points with low likelihood
