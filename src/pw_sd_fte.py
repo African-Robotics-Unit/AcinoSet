@@ -25,6 +25,7 @@ def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
 
     Args:
         root_dir: The root directory where the videos are stored, along with the `pose_3d_functions.pickle` file, and `gt_labels` directory.
+        use_3D_gt: Flag to select 3D ground truth for evaluation. Defaults to False.
 
     Returns:
         results in a dictionary.
@@ -92,6 +93,7 @@ def metrics(
         end_frame: The end frame number.
         dlc_thresh: The DLC confidence score to filter 2D keypoints. Defaults to 0.5.
         use_3D_gt: Flag to select 3D ground truth for evaluation. Defaults to False.
+        type_3D_gt: Sets the type of 3D ground truth to expect. Valid values are fte, pw_fte, sd_fte, pw_sd_fte.
 
     Returns:
         A tuple consisting of the mean error [px], median error [px], and PCK [%].
