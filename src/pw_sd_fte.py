@@ -32,9 +32,10 @@ def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
     if not use_3D_gt:
         data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "lily", "flick"),
         os.path.join("2017_12_16", "bottom", "phantom", "flick2_1"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
+        frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
     else:
-        data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "jules", "flick1")]
-    frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
+        data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
+        frames = [(80, 180), (60, 200)]
     dlc_thresh = 0.5
     # Initialise the Ipopt solver.
     optimiser = SolverFactory("ipopt", executable="/home/zico/lib/ipopt/build/bin/ipopt")
@@ -50,7 +51,7 @@ def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
     optimiser.options["linear_solver"] = "ma86"
     optimiser.options["OF_ma86_scaling"] = "none"
 
-    results = {"FTE": {}, "SD-FTE": {}, "PW-FTE": {}, "PW-SD-FTE": {}}
+    results = {"fte": {}, "sd_fte": {}, "pw_fte": {}, "pw_sd_fte": {}}
     for i, data_path in enumerate(data_paths):
         for test in results.keys():
             # Run the optimisation
@@ -60,15 +61,16 @@ def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
                 end_frame=frames[i][1],
                 dlc_thresh=dlc_thresh,
                 opt=optimiser,
-                enable_shutter_delay=True if "SD" in test else False,
-                enable_ppms=True if "PW" in test else False)
+                enable_shutter_delay=True if "sd" in test else False,
+                enable_ppms=True if "pw" in test else False)
             # Produce results
             results[test][data_path] = metrics(root_dir,
                                             data_path,
                                             start_frame=frames[i][0],
                                             end_frame=frames[i][1],
                                             dlc_thresh=dlc_thresh,
-                                            use_3D_gt=use_3D_gt)
+                                            use_3D_gt=use_3D_gt,
+                                            type_3D_gt=test)
     return results
 
 def metrics(
@@ -78,6 +80,7 @@ def metrics(
     end_frame: int,
     dlc_thresh: float = 0.5,
     use_3D_gt: bool = False,
+    type_3D_gt: str = "fte",
 ) -> Tuple[float, float, float]:
     """
     Generate metrics for a particular reconstruction. Note, the `fte.pickle` needs to be generated prior to calling this function.
@@ -93,7 +96,7 @@ def metrics(
     Returns:
         A tuple consisting of the mean error [px], median error [px], and PCK [%].
     """
-    out_dir = os.path.join(root_dir, data_path, 'fte')
+    out_dir = os.path.join(root_dir, data_path, type_3D_gt)
     # load DLC data
     data_dir = os.path.join(root_dir, data_path)
     dlc_dir = os.path.join(data_dir, 'dlc')
@@ -121,7 +124,7 @@ def metrics(
     if not use_3D_gt and len(gt_points_fpaths) > 0:
         points_2d_df = utils.load_dlc_points_as_df(gt_points_fpaths, verbose=False)
     elif use_3D_gt:
-        points_2d_df = pd.read_csv(os.path.join(root_dir, 'gt_labels', gt_name, f"{gt_name}.csv"))
+        points_2d_df = pd.read_csv(os.path.join(root_dir, 'gt_labels', gt_name, f"{gt_name}_{type_3D_gt}.csv"))
     else:
         print('No ground truth labels for this test.')
         points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
@@ -204,8 +207,12 @@ def run(root_dir: str,
     print('Prepare data - Start')
 
     t0 = time()
-
-    out_dir = os.path.join(root_dir, data_path, 'fte')
+    out_dir_name = 'fte'
+    if enable_shutter_delay:
+        out_dir_name = 'sd_' + out_dir_name
+    elif enable_ppms:
+        out_dir_name = 'pw_' + out_dir_name
+    out_dir = os.path.join(root_dir, data_path, out_dir_name)
 
     data_dir = os.path.join(root_dir, data_path)
     assert os.path.exists(data_dir)
