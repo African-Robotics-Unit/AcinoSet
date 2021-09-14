@@ -9,7 +9,7 @@ For more information please read our paper on the topic: [TODO](#)
 ### Getting started
 If you want to obtain metrics for each method, download the 2D hand labelled [ground truth](https://www.dropbox.com/sh/r0b1a086wl7dqkv/AAD5zBQ-nSiTS5Dc2QqTd_ZDa?dl=0) data.
 
-There is a simple [jupyter notebook](/src/pw_sd_fte.ipynb) to get started with running the code. The `pw_sd_fte.py` module exposes three main functions - `run`, `metrics`, `acinoset_comparison`.  Refer to the docstrings on how to interact with the API.
+There is a simple [jupyter notebook](/src/PW-SD-FTE.ipynb) to get started with running the code. The `pw_sd_fte.py` module exposes three main functions - `run`, `metrics`, `acinoset_comparison`.  Refer to the docstrings on how to interact with the API.
 
 ### Pairwise pseudo-measurement graph
 In this work, we decided to only generate PPMs from “intuitive” pairwise terms, i.e. infer the  location  of  a  keypoint  that  makes  kinematic  sense  with regard to the cheetah skeleton. The table below provides the base keypoint and it's corresponding PPMs.
