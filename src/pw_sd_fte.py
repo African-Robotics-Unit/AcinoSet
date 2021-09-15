@@ -82,6 +82,7 @@ def metrics(
     dlc_thresh: float = 0.5,
     use_3D_gt: bool = False,
     type_3D_gt: str = "fte",
+    out_dir_prefix: str = None,
 ) -> Tuple[float, float, float]:
     """
     Generate metrics for a particular reconstruction. Note, the `fte.pickle` needs to be generated prior to calling this function.
@@ -94,11 +95,15 @@ def metrics(
         dlc_thresh: The DLC confidence score to filter 2D keypoints. Defaults to 0.5.
         use_3D_gt: Flag to select 3D ground truth for evaluation. Defaults to False.
         type_3D_gt: Sets the type of 3D ground truth to expect. Valid values are fte, pw_fte, sd_fte, pw_sd_fte.
+        out_dir_prefix: Used to change the output directory from the root. This is often used if you have the cheetah data stored in a location and you want the output to be saved elsewhere.
 
     Returns:
         A tuple consisting of the mean error [px], median error [px], and PCK [%].
     """
-    out_dir = os.path.join(root_dir, data_path, type_3D_gt)
+    if out_dir_prefix:
+        out_dir = os.path.join(out_dir_prefix, data_path, type_3D_gt)
+    else:
+        out_dir = os.path.join(root_dir, data_path, type_3D_gt)
     # load DLC data
     data_dir = os.path.join(root_dir, data_path)
     dlc_dir = os.path.join(data_dir, 'dlc')
@@ -190,7 +195,8 @@ def run(root_dir: str,
         enable_ppms: bool = False,
         enable_shutter_delay: bool = False,
         opt=None,
-        generate_reprojection_videos: bool = False) -> None:
+        generate_reprojection_videos: bool = False,
+        out_dir_prefix: str = None,) -> None:
     """
     Runs the FTE 3D reconstruction.
 
@@ -205,6 +211,7 @@ def run(root_dir: str,
         enable_shutter_delay: Flag to indicate if shutter delay correction should be performed. Defaults to False.
         opt: A instance of the Pyomo optimiser. This is useful if you are calling this function in a loop; preventing re-initialisation of the optimiser. Defaults to None.
         generate_reprojection_videos: Flag to enable the generation of 2D reprojection videos. Defaults to False.
+        out_dir_prefix: Used to change the output directory from the root. This is often used if you have the cheetah data stored in a location and you want the output to be saved elsewhere.
     """
     print('Prepare data - Start')
 
@@ -214,7 +221,10 @@ def run(root_dir: str,
         out_dir_name = 'sd_' + out_dir_name
     elif enable_ppms:
         out_dir_name = 'pw_' + out_dir_name
-    out_dir = os.path.join(root_dir, data_path, out_dir_name)
+    if out_dir_prefix:
+        out_dir = os.path.join(out_dir_prefix, data_path, out_dir_name)
+    else:
+        out_dir = os.path.join(root_dir, data_path, out_dir_name)
 
     data_dir = os.path.join(root_dir, data_path)
     assert os.path.exists(data_dir)
