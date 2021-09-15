@@ -1,8 +1,9 @@
 import os
-import platform
 import json
 from typing import Union, Tuple, Dict, List
 import numpy as np
+from tqdm import tqdm
+from argparse import ArgumentParser
 
 from pyomo.core.expr.current import log as pyomo_log
 import sympy as sp
@@ -18,6 +19,108 @@ import matplotlib.pyplot as plt
 
 plt.style.use(os.path.join('../configs', 'mechatronics_style.yaml'))
 
+def run_acinoset(root_dir: str, video_data: Dict, out_dir_prefix: str):
+    import gc
+    tests = video_data['test_dirs']
+    manually_selected_frames = {
+        '2019_03_03/phantom/run': (73, 272),
+        '2017_12_12/top/cetane/run1_1': (100, 241),
+        '2019_03_05/jules/run': (58, 176),
+        '2019_03_09/lily/run': (80, 180),
+        '2017_09_03/top/zorro/run1_2': (20, 120),
+        '2017_08_29/top/phantom/run1_1': (20, 170),
+        '2017_12_21/top/lily/run1': (7, 106),
+        '2019_03_03/menya/run': (20, 130),
+        '2017_12_10/top/phantom/run1': (30, 130),
+        '2017_09_03/bottom/zorro/run2_1': (126, 325),
+        '2019_02_27/ebony/run': (20, 200),
+        '2017_12_09/bottom/phantom/run2': (18, 117),
+        '2017_09_03/bottom/zorro/run2_3': (1, 200),
+        '2017_08_29/top/jules/run1_1': (10, 110),
+        '2017_09_02/top/jules/run1': (10, 110),
+        '2019_03_07/menya/run': (60, 160),
+        '2017_09_02/top/phantom/run1_2': (20, 160),
+        '2019_03_05/lily/run': (150, 250),
+        '2017_12_12/top/cetane/run1_2': (3, 202),
+        '2019_03_07/phantom/run': (100, 200),
+        '2019_02_27/romeo/run': (12, 190),
+        '2017_08_29/top/jules/run1_2': (30, 130),
+        '2017_12_16/top/cetane/run1': (110, 210),
+        '2017_09_02/top/phantom/run1_1': (33, 150),
+        '2017_09_02/top/phantom/run1_3': (35, 135),
+        '2017_09_03/top/zorro/run1_1': (4, 203),
+        '2019_02_27/kiara/run': (10, 110),
+        '2017_09_02/bottom/jules/run2': (35, 171),
+        '2017_09_03/bottom/zorro/run2_2': (32, 141),
+        '2019_03_05/lily/flick': (100, 200),
+        '2017_08_29/top/zorro/flick1_2': (20, 140),
+        '2017_09_02/bottom/phantom/flick2_1': (5, 100),
+        '2017_12_12/bottom/big_girl/flick2': (30, 100),
+        '2019_03_03/phantom/flick': (270, 460),
+        '2019_03_09/lily/flick': (10, 100),
+        '2019_03_09/jules/flick2': (80, 185),
+        '2017_09_03/top/zorro/flick1_1': (62, 150),
+        '2017_12_21/top/lily/flick1': (40, 180),
+        '2017_12_21/bottom/jules/flick2_1': (50, 200),
+        '2017_09_03/top/phantom/flick1': (100, 240),
+        '2017_09_02/top/jules/flick1_1': (60, 200),
+        '2017_08_29/top/phantom/flick1_1': (50, 200)
+    }
+
+    bad_videos = ('2017_09_03/bottom/phantom/flick2', '2017_09_02/top/phantom/flick1_1', '2017_12_17/top/zorro/flick1')
+    time0 = time()
+    print('Run reconstruction on all videos...')
+    # Initialise the Ipopt solver.
+    optimiser = SolverFactory('ipopt', executable='/home/zico/lib/ipopt/build/bin/ipopt')
+    # solver options
+    optimiser.options['print_level'] = 5
+    optimiser.options['max_iter'] = 400
+    optimiser.options['max_cpu_time'] = 10000
+    optimiser.options['Tol'] = 1e-1
+    optimiser.options['OF_print_timing_statistics'] = 'yes'
+    optimiser.options['OF_print_frequency_time'] = 10
+    optimiser.options['OF_hessian_approximation'] = 'limited-memory'
+    optimiser.options['OF_accept_every_trial_step'] = 'yes'
+    optimiser.options['linear_solver'] = 'ma86'
+    optimiser.options['OF_ma86_scaling'] = 'none'
+    for test_vid in tqdm(tests):
+        # Force garbage collection so that the repeated model creation does not overflow the memory!
+        gc.collect()
+        current_dir = test_vid.split('/cheetah_videos/')[1]
+        # Filter parameters based on past experience.
+        if current_dir in bad_videos:
+            # Skip these videos because of erroneous input data.
+            continue
+        start = 1
+        end = -1
+        if current_dir in set(manually_selected_frames.keys()):
+            start = manually_selected_frames[current_dir][0]
+            end = manually_selected_frames[current_dir][1]
+        try:
+            run(root_dir,
+                current_dir,
+                start_frame=start,
+                end_frame=end,
+                dlc_thresh=0.5,
+                enable_shutter_delay=True,
+                enable_ppms=True if 'flick' in current_dir else False,
+                opt=optimiser,
+                generate_reprojection_videos=True,
+                out_dir_prefix=out_dir_prefix)
+        except Exception:
+            run(root_dir,
+                current_dir,
+                start_frame=-1,
+                end_frame=1,
+                dlc_thresh=0.5,
+                enable_shutter_delay=True,
+                enable_ppms=True if 'flick' in current_dir else False,
+                opt=optimiser,
+                generate_reprojection_videos=True,
+                out_dir_prefix=out_dir_prefix)
+
+    time1 = time()
+    print(f'Run through all videos took {time1 - time0:.2f}s')
 
 def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
     """
@@ -31,28 +134,28 @@ def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
         results in a dictionary.
     """
     if not use_3D_gt:
-        data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2019_03_09", "lily", "flick"),
-        os.path.join("2017_12_16", "bottom", "phantom", "flick2_1"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
+        data_paths = [os.path.join('2019_03_09', 'jules', 'flick2'), os.path.join('2019_03_09', 'lily', 'flick'),
+        os.path.join('2017_12_16', 'bottom', 'phantom', 'flick2_1'), os.path.join('2017_09_03', 'top', 'zorro', 'flick1_1')]
         frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
     else:
-        data_paths = [os.path.join("2019_03_09", "jules", "flick2"), os.path.join("2017_09_03", "top", "zorro", "flick1_1")]
+        data_paths = [os.path.join('2019_03_09', 'jules', 'flick2'), os.path.join('2017_09_03', 'top', 'zorro', 'flick1_1')]
         frames = [(80, 180), (60, 200)]
     dlc_thresh = 0.5
     # Initialise the Ipopt solver.
-    optimiser = SolverFactory("ipopt", executable="/home/zico/lib/ipopt/build/bin/ipopt")
+    optimiser = SolverFactory('ipopt', executable='/home/zico/lib/ipopt/build/bin/ipopt')
     # solver options
-    optimiser.options["print_level"] = 5
-    optimiser.options["max_iter"] = 400
-    optimiser.options["max_cpu_time"] = 10000
-    optimiser.options["Tol"] = 1e-1
-    optimiser.options["OF_print_timing_statistics"] = "yes"
-    optimiser.options["OF_print_frequency_time"] = 10
-    optimiser.options["OF_hessian_approximation"] = "limited-memory"
-    optimiser.options["OF_accept_every_trial_step"] = "yes"
-    optimiser.options["linear_solver"] = "ma86"
-    optimiser.options["OF_ma86_scaling"] = "none"
+    optimiser.options['print_level'] = 5
+    optimiser.options['max_iter'] = 400
+    optimiser.options['max_cpu_time'] = 10000
+    optimiser.options['Tol'] = 1e-1
+    optimiser.options['OF_print_timing_statistics'] = 'yes'
+    optimiser.options['OF_print_frequency_time'] = 10
+    optimiser.options['OF_hessian_approximation'] = 'limited-memory'
+    optimiser.options['OF_accept_every_trial_step'] = 'yes'
+    optimiser.options['linear_solver'] = 'ma86'
+    optimiser.options['OF_ma86_scaling'] = 'none'
 
-    results = {"fte": {}, "sd_fte": {}, "pw_fte": {}, "pw_sd_fte": {}}
+    results = {'fte': {}, 'sd_fte': {}, 'pw_fte': {}, 'pw_sd_fte': {}}
     for i, data_path in enumerate(data_paths):
         for test in results.keys():
             # Run the optimisation
@@ -62,8 +165,8 @@ def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
                 end_frame=frames[i][1],
                 dlc_thresh=dlc_thresh,
                 opt=optimiser,
-                enable_shutter_delay=True if "sd" in test else False,
-                enable_ppms=True if "pw" in test else False)
+                enable_shutter_delay=True if 'sd' in test else False,
+                enable_ppms=True if 'pw' in test else False)
             # Produce results
             results[test][data_path] = metrics(root_dir,
                                             data_path,
@@ -131,7 +234,7 @@ def metrics(
     if not use_3D_gt and len(gt_points_fpaths) > 0:
         points_2d_df = utils.load_dlc_points_as_df(gt_points_fpaths, verbose=False)
     elif use_3D_gt:
-        points_2d_df = pd.read_csv(os.path.join(root_dir, 'gt_labels', gt_name, f"{gt_name}_{type_3D_gt}.csv"))
+        points_2d_df = pd.read_csv(os.path.join(root_dir, 'gt_labels', gt_name, f'{gt_name}_{type_3D_gt}.csv'))
     else:
         print('No ground truth labels for this test.')
         points_2d_df = utils.load_dlc_points_as_df(dlc_points_fpaths, verbose=False)
@@ -880,9 +983,21 @@ def _loss_function(residual: float, loss='redescending') -> float:
 
 # ========= MAIN ========
 if __name__ == '__main__':
+    parser = ArgumentParser(description='All Optimizations')
+    parser.add_argument('--run', action='store_true', help='Run reconstruction over all videos in AcinoSet.')
+    parser.add_argument('--eval', action='store_true', help='Evaluate reconstruction over a subset of videos in AcinoSet.')
+    args = parser.parse_args()
+
     root_dir = os.path.join('/', 'data', 'dlc', 'to_analyse', 'cheetah_videos')
-    results = acinoset_comparison(root_dir)
-    utils.save_pickle(os.path.join(root_dir, 'acinoset_comparison_results.pickle'), results)
-    results_table = pd.DataFrame.from_dict({(i,j): results[i][j] for i in results.keys() for j in results[i].keys()}, orient='index', columns=["Mean Error", "Median Error", "PCK"])
-    print(results_table)
-    results_table.to_csv(os.path.join(root_dir, 'acinoset_comparison_results.csv'))
+
+    if args.eval:
+        results = acinoset_comparison(root_dir)
+        utils.save_pickle(os.path.join(root_dir, 'acinoset_comparison_results.pickle'), results)
+        results_table = pd.DataFrame.from_dict({(i,j): results[i][j] for i in results.keys() for j in results[i].keys()}, orient='index', columns=['Mean Error', 'Median Error', 'PCK'])
+        print(results_table)
+        results_table.to_csv(os.path.join(root_dir, 'acinoset_comparison_results.csv'))
+
+    if args.run:
+        video_list = utils.load_pickle('/data/zico/CheetahResults/test_videos_list.pickle')
+        dir_prefix = '/data/zico/CheetahResults/pw-sd-fte'
+        run_acinoset(root_dir, video_data=video_list, out_dir_prefix=dir_prefix)
