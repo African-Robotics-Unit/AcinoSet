@@ -20,6 +20,14 @@ import matplotlib.pyplot as plt
 plt.style.use(os.path.join('../configs', 'mechatronics_style.yaml'))
 
 def run_acinoset(root_dir: str, video_data: Dict, out_dir_prefix: str):
+    """
+    Runs through the video list in AcinoSet and performs the 3D reconstruction for each video.
+
+    Args:
+        root_dir: The root directory where the videos are stored, along with the `pose_3d_functions.pickle` file, and `gt_labels` directory.
+        video_data: The list of videos stored in a dictionary with a key `test_dirs` for each directory in AcinoSet.
+        out_dir_prefix: Used to change the output directory from the root. This is often used if you have the cheetah data stored in a location and you want the output to be saved elsewhere.
+    """
     import gc
     tests = video_data['test_dirs']
     manually_selected_frames = {
