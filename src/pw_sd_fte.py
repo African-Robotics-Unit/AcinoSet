@@ -330,7 +330,7 @@ def run(root_dir: str,
     out_dir_name = 'fte'
     if enable_shutter_delay:
         out_dir_name = 'sd_' + out_dir_name
-    elif enable_ppms:
+    if enable_ppms:
         out_dir_name = 'pw_' + out_dir_name
     if out_dir_prefix:
         out_dir = os.path.join(out_dir_prefix, data_path, out_dir_name)
