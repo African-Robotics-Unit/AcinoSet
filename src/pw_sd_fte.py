@@ -19,6 +19,65 @@ import matplotlib.pyplot as plt
 
 plt.style.use(os.path.join('../configs', 'mechatronics_style.yaml'))
 
+def validate_dataset(root_dir: str) -> List:
+    markers = misc.get_markers()
+    coords = ['x', 'y', 'z']
+
+    # get velocity of virtual body
+    def get_velocity(position, h):
+        # body COM approximated as mean of tail base, spine and neck points
+        body_x = np.mean([position[m, 'x'] for m in ['tail_base', 'spine', 'neck_base']],0)
+        body_y = np.mean([position[m, 'y'] for m in ['tail_base', 'spine', 'neck_base']],0)
+        body_z = np.mean([position[m, 'z'] for m in ['tail_base', 'spine', 'neck_base']],0)
+
+        body_dx = (body_x[1:]-body_x[:-1])/h
+        body_dy = (body_y[1:]-body_y[:-1])/h
+        body_dz = (body_z[1:]-body_z[:-1])/h
+
+        body_v = np.sqrt(body_dx**2 + body_dy**2 + body_dz**2)
+        return body_v
+
+    # extract position data from individual pickle file
+    def extract_data(filename):
+        data = utils.load_pickle(filename)
+
+        position = {}
+        for m_i,m in enumerate(markers):
+            for c_i,c in enumerate(coords):
+                    position.update({(m,c):np.array([data['positions'][f][m_i][c_i] for f in range(len(data['positions']))])})
+        # flip direction if running towards -x
+        if position['neck_base','x'][-1] < position['neck_base','x'][0]:
+            for m in markers:
+                for c in ['x','y']:
+                    position[m,c] = -position[m,c]
+        return position
+
+    bad_trajectories = []
+    fte_fpaths = sorted(glob(os.path.join(root_dir, "**/fte.pickle"), recursive=True))
+    for fpath in fte_fpaths:
+        position = extract_data(fpath)
+        temp = fpath.split(root_dir)[1]
+        info = temp.split(os.sep)
+        date = info[1]
+        # sanity checks
+        fail = 0
+        h = 1/90
+        if date[:4] == '2017': h = 1/90
+        if date[:4] == '2019': h = 1/120
+        body_v = get_velocity(position, h)
+        if np.max(np.abs(body_v)) > 50: # if velocity implausibly high
+            fail += 1
+        for m in markers:
+            if np.min(position[m, 'z']) < -0.3: # goes too deep
+                fail += 1
+            if m not in ['tail_base', 'tail1', 'tail2'] and np.max(position[m, 'z']) > 1: # goes too high
+                fail += 1
+
+        if fail != 0:
+            bad_trajectories.append(os.sep.join(info[1:-2]))
+
+    return bad_trajectories
+
 def run_acinoset(root_dir: str, video_data: Dict, out_dir_prefix: str):
     """
     Runs through the video list in AcinoSet and performs the 3D reconstruction for each video.
