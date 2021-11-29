@@ -16,9 +16,9 @@ from .calib import calibrate_camera, calibrate_fisheye_camera, \
     create_undistort_point_function, create_undistort_fisheye_point_function, \
     triangulate_points, triangulate_points_fisheye, \
     project_points, project_points_fisheye, \
-    _calibrate_pairwise_extrinsics
+    _calibrate_pairwise_extrinsics, project_board_points, save_scene
 from .plotting import plot_calib_board, plot_optimized_states, \
-    plot_extrinsics, plot_marker_3d, Cheetah
+    plot_extrinsics, plot_marker_3d, Cheetah, plot_corners as plot_board_corners, plot_confidence_ellipse
 
 
 def extract_corners_from_images(img_dir, out_fpath, board_shape, board_edge_len, window_size=11, remove_unused_images=False):
@@ -90,7 +90,15 @@ def calibrate_standard_intrinsics(points_fpath, out_fpath):
     obj_pts = create_board_object_pts(board_shape, board_edge_len)
     k, d, r, t = calibrate_camera(obj_pts, points, cam_res)
     print('K:\n', k, '\nD:\n', d)
-    save_camera(out_fpath, cam_res, k, d)
+    save_camera(out_fpath, cam_res, k, d[:, :4])
+    # Reprojection error.
+    obj_projected_pts = project_board_points(obj_pts, k, d, r, t)
+    projected_pts = points.reshape((-1, 9, 2))
+    diff = obj_projected_pts - projected_pts
+    residuals = diff.reshape(-1, 2)
+    rmse = np.linalg.norm(residuals) / np.sqrt(residuals.shape[0])
+    print(f"Intrinsic calibration reprojection error (px): {rmse:.4f}")
+
     return k, d, r, t, points
 
 
@@ -141,7 +149,6 @@ def sba_points_fisheye(scene_fpath, points_2d_df):
 
 def plot_corners(points_fpath):
     points, fnames, board_shape, board_edge_len, cam_res = load_points(points_fpath)
-    plot_calib_board(points, board_shape, cam_res)
 
 
 def plot_points_standard_undistort(points_fpath, camera_fpath):
