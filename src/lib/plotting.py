@@ -73,9 +73,11 @@ def create_grid(obj_points, board_shape, color=[0.5]*3):
     return mesh
 
 
-def plot_calib_board(img_points, board_shape, camera_resolution, frame_fpath=None):
+def plot_calib_board(img_points, board_shape, camera_resolution, frame_fpath=None, obj_corners=None):
     corners = np.array(img_points, dtype=np.float32)
-    plt.figure(figsize=(8, 4.5))
+    if obj_corners is not None:
+        obj_corners = np.array(obj_corners, dtype=np.float32)
+    plt.figure(figsize=(16, 9), dpi=120)
     if frame_fpath:
         plt.imshow(plt.imread(frame_fpath))
 
@@ -92,14 +94,50 @@ def plot_calib_board(img_points, board_shape, camera_resolution, frame_fpath=Non
             for r in range(rows - 1):
                 edges.append(c + r * cols)
                 edges.append(c + (r + 1) * cols)
-        lc = mc.LineCollection(pts[edges].reshape(-1, 2, 2), color='r', linewidths=0.25)
-
+        lc = mc.LineCollection(pts[edges].reshape(-1, 2, 2), color='r', linewidths=0.1)
         plt.gca().add_collection(lc)
+
+    if obj_corners is not None:
+        for pts in obj_corners:
+            pts = pts.reshape(-1, 2)
+            cols = board_shape[0]
+            rows = board_shape[1]
+            edges = []
+            for r in range(rows):
+                for c in range(cols - 1):
+                    edges.append(c + r * cols)
+                    edges.append(c + r * cols + 1)
+            for c in range(cols):
+                for r in range(rows - 1):
+                    edges.append(c + r * cols)
+                    edges.append(c + (r + 1) * cols)
+            lc = mc.LineCollection(pts[edges].reshape(-1, 2, 2), color='b', linewidths=0.1)
+            plt.gca().add_collection(lc)
+
         plt.gca().set_xlim((0, camera_resolution[0]))
         plt.gca().set_ylim((camera_resolution[1], 0))
 
     plt.show()
 
+def plot_corners(img_points, obj_corners, board_shape, camera_resolution, frame_fpath=None):
+    corners = np.array(img_points, dtype=np.float32)
+    obj_corners = np.array(obj_corners, dtype=np.float32)
+    plt.figure(figsize=(16, 9), dpi=120)
+    if frame_fpath:
+        plt.imshow(plt.imread(frame_fpath))
+
+    for pts in corners:
+        pts = pts.reshape(-1, 2)
+        plt.scatter(pts[:, 0], pts[:, 1], color="r", s=2)
+
+    for pts in obj_corners:
+        pts = pts.reshape(-1, 2)
+        plt.scatter(pts[:, 0], pts[:, 1], color="b", s=2)
+
+    plt.gca().set_xlim((0, camera_resolution[0]))
+    plt.gca().set_ylim((camera_resolution[1], 0))
+
+    plt.show()
 
 class Animation:
     def __init__(self, title, scene_fpath, centered=False, dark_mode=False):
