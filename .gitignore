@@ -9,7 +9,6 @@
 .python_history
 __pycache__
 CoinIpopt/*
-data
 lists
 logs
 
