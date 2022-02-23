@@ -31,7 +31,13 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
     links = skel_dict["links"]
     positions = skel_dict["positions"]
     dofs = skel_dict["dofs"]
+    print(dofs)
     markers = skel_dict["markers"]
+    for joint in markers:
+        dofs[joint] = [1, 1, 1]
+    
+    print("New dofs:")
+    print(dofs)
     rot_dict = {}
     pose_dict = {}
     L = len(positions)
@@ -121,8 +127,8 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
         return val["likelihood"].values[0]
     
     h = 1/120 #timestep
-    start_frame = 1600 # 50
-    N = 50
+    start_frame = 60 # 50
+    N = 100
     P = 3 + len(phi)+len(theta)+len(psi)
     L = len(pos_funcs)
     C = len(K_arr)
@@ -131,7 +137,7 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
 
     proj_funcs = [pt3d_to_x2d, pt3d_to_y2d]
 
-    R = 5 # measurement standard deviation
+    R = 3 # measurement standard deviation
     Q = np.array([ # model parameters variance
         4.0,
         7.0,
@@ -334,7 +340,8 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
             for l in range(1, L+1):
                 for c in range (1, C+1):
                     for d2 in range(1, D2+1):
-                        slack_meas_err += redescending_loss(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2], 3, 10, 20)
+                        #slack_meas_err += redescending_loss(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2], 3, 5, 15)
+                        slack_meas_err += abs(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2])
         return slack_meas_err + slack_model_err
 
     m.obj = Objective(rule = obj)
