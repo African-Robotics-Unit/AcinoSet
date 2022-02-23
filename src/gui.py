@@ -364,7 +364,7 @@ class PageTwo(tk.Frame):
             Replots canvas on the GUI with updated points
             """
             a.set_xlim3d(-2, 2)
-            a.set_ylim3d(6, 8)
+            a.set_ylim3d(5, 9)
             a.set_zlim3d(-2,2)
             canvas = FigureCanvasTkAgg(f, self)
             canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
@@ -372,7 +372,7 @@ class PageTwo(tk.Frame):
 
         def init():
             a.set_xlim3d(-1, 8)
-            a.set_ylim3d(6, 10)
+            a.set_ylim3d(26, 28)
             a.set_zlim3d(0,1)
             a.view_init(elev=20., azim=30)
         
@@ -386,8 +386,8 @@ class PageTwo(tk.Frame):
             pose_dict = {}
             currdir = os.getcwd()
             skel_name = (field_name1.get())
-            skelly_dir = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "skeletons", ("new_human.pickle"))
-            results_dir = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "data", "results", ("traj_results.pickle"))
+            skelly_dir = os.path.join("/Users/user/Documents/Scripts/amaan_acino/AcinoSet", "skeletons", ("new_human.pickle"))
+            results_dir = os.path.join("/Users/user/Documents/Scripts/amaan_acino/AcinoSet", "data", "results", ("traj_results.pickle"))
 
             skel_dict = bd.load_skeleton(skelly_dir)
             results = an.load_pickle(results_dir)
