@@ -205,8 +205,8 @@ def acinoset_comparison(root_dir: str, use_3D_gt: bool = False) -> Dict:
         os.path.join('2017_12_16', 'bottom', 'phantom', 'flick2_1'), os.path.join('2017_09_03', 'top', 'zorro', 'flick1_1')]
         frames = [(80, 180), (10, 110), (140, 240), (60, 200)]
     else:
-        data_paths = [os.path.join('2019_03_09', 'jules', 'flick2'), os.path.join('2017_09_03', 'top', 'zorro', 'flick1_1')]
-        frames = [(80, 180), (60, 200)]
+        data_paths = [os.path.join('2019_03_09', 'jules', 'flick2'), os.path.join('2017_09_03', 'top', 'zorro', 'flick1_1'), os.path.join('2017_08_29', 'top', 'phantom', 'flick1_1')]
+        frames = [(80, 180), (60, 200), (50, 200)]
     dlc_thresh = 0.5
     # Initialise the Ipopt solver.
     optimiser = SolverFactory('ipopt', executable='/home/zico/lib/ipopt/build/bin/ipopt')
