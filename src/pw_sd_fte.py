@@ -1058,7 +1058,7 @@ if __name__ == '__main__':
     root_dir = os.path.join('/', 'data', 'dlc', 'to_analyse', 'cheetah_videos')
 
     if args.eval:
-        results = acinoset_comparison(root_dir)
+        results = acinoset_comparison(root_dir, True)
         utils.save_pickle(os.path.join(root_dir, 'acinoset_comparison_results.pickle'), results)
         results_table = pd.DataFrame.from_dict({(i,j): results[i][j] for i in results.keys() for j in results[i].keys()}, orient='index', columns=['Mean Error', 'Median Error', 'PCK'])
         print(results_table)
