@@ -12,6 +12,7 @@ from pyomo.environ import *
 from pyomo.opt import SolverFactory
 from pyomo.opt import SolverStatus, TerminationCondition
 from pyomo.core.base.PyomoModel import ConcreteModel
+from argparse import ArgumentParser
 
 pose_to_3d = []
 
@@ -31,7 +32,14 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
     links = skel_dict["links"]
     positions = skel_dict["positions"]
     dofs = skel_dict["dofs"]
+    print(dofs)
     markers = skel_dict["markers"]
+    for joint in markers:
+        dofs[joint] = [1, 1, 1]
+
+    
+    print("New dofs:")
+    print(dofs)
     rot_dict = {}
     pose_dict = {}
     L = len(positions)
@@ -86,7 +94,7 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
         lamb = sp.lambdify(sym_list, t_poses_mat[i,:], modules=[func_map])
         pos_funcs.append(lamb)
     
-    scene_path = os.path.join(project_dir, "4_cam_scene_static_sba.json")
+    scene_path = os.path.join(project_dir, "data", "4_cam_scene_static_sba.json")
 
     K_arr, D_arr, R_arr, t_arr, _ = utils.load_scene(scene_path)
     D_arr = D_arr.reshape((-1,4))
@@ -95,7 +103,7 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
 
     print(f"\n\n\nLoading data")
 
-    df_paths = sorted(glob.glob(os.path.join(project_dir, '*.h5')))
+    df_paths = sorted(glob.glob(os.path.join(project_dir, "data", '*.h5')))
     points_2d_df = utils.create_dlc_points_2d_file(df_paths)
     print("2d df points:")
     print(points_2d_df)
@@ -121,8 +129,8 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
         return val["likelihood"].values[0]
     
     h = 1/120 #timestep
-    start_frame = 1600 # 50
-    N = 50
+    start_frame = 60 # 50
+    N = 100
     P = 3 + len(phi)+len(theta)+len(psi)
     L = len(pos_funcs)
     C = len(K_arr)
@@ -131,57 +139,10 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
 
     proj_funcs = [pt3d_to_x2d, pt3d_to_y2d]
 
-    R = 5 # measurement standard deviation
-    Q = np.array([ # model parameters variance
-        4.0,
-        7.0,
-        5.0,
-        13.0,
-        32.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        9.0,
-        18.0,
-        43.0,
-        53.0,
-        90.0,
-        118.0,
-        247.0,
-        186.0,
-        194.0,
-        164.0,
-        295.0,
-        243.0,
-        334.0,
-        149.0,
-        26.0,
-        12.0,
-        0.0,
-        34.0,
-        43.0,
-        51.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0
-    ])**2
+    R = 3 # measurement standard deviation
 
     triangulate_func = calib.triangulate_points_fisheye
-    points_2d_filtered_df = points_2d_df[points_2d_df['likelihood']>0.5]
+    points_2d_filtered_df = points_2d_df[points_2d_df['likelihood']>0.4]
     points_3d_df = calib.get_pairwise_3d_points_from_df(points_2d_filtered_df, K_arr, D_arr, R_arr, t_arr, triangulate_func)
     print("3d points")
     print(points_3d_df)
@@ -216,7 +177,7 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
 
     def init_meas_weights(model, n, c, l):
         likelihood = get_likelihood_from_df(n+start_frame, c, l)
-        if likelihood > 0.5:
+        if likelihood > 0.4:
             return 1/R
         else:
             return 0
@@ -226,7 +187,7 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
         #if Q[p-1] != 0.0:
             #return 1/Q[p-1]
         #else:
-        return 0.01
+        return 0.002
     m.model_err_weight = Param(m.P, initialize=init_model_weights, within=Any)
 
     m.h = h
@@ -334,7 +295,8 @@ def build_model(skel_dict, project_dir) -> ConcreteModel:
             for l in range(1, L+1):
                 for c in range (1, C+1):
                     for d2 in range(1, D2+1):
-                        slack_meas_err += redescending_loss(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2], 3, 10, 20)
+                        #slack_meas_err += redescending_loss(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2], 3, 5, 15)
+                        slack_meas_err += abs(m.meas_err_weight[n, c, l] * m.slack_meas[n, c, l, d2])
         return slack_meas_err + slack_model_err
 
     m.obj = Objective(rule = obj)
@@ -360,7 +322,7 @@ def solve_optimisation(model, exe_path, project_dir, poses) -> None:
     opt.options["OF_hessian_approximation"] = "limited-memory"
     #opt.options["linear_solver"] = "ma86"
 
-    LOG_DIR = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "logs")
+    LOG_DIR = os.path.join(project_dir, "logs")
 
     # --- This step may take a while! ---
     results = opt.solve(
@@ -369,7 +331,7 @@ def solve_optimisation(model, exe_path, project_dir, poses) -> None:
         logfile=os.path.join(LOG_DIR, "solver.log")
     )
 
-    result_dir = os.path.join(project_dir, "results")
+    result_dir = os.path.join(project_dir, "data", "results")
     save_data(model, file_path=os.path.join(result_dir, 'traj_results.pickle'), poses=poses)
 
 #def save_data(file_data, filepath, dict=False):
@@ -519,9 +481,17 @@ def pt3d_to_y2d(x, y, z, K, D, R, t):
     return v
 
 if __name__ == "__main__":
-    skeleton_path = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "skeletons", "new_human.pickle")
+    parser = ArgumentParser(description = "Build and Optimise")
+    parser.add_argument('--top_dir', type=str, help='The data directory path to the flick/run to be optimized')
+    parser.add_argument('--start_frame', type=int, default=1, help='The frame at which the optimized reconstruction will start at')
+    parser.add_argument('--end_frame', type=int, default=-100, help='The frame at which the optimized reconstruction will end at')
+    parser.add_argument('--dlc_thresh', type=float, default=0.5, help='The likelihood of the dlc points below which will be excluded from the optimization')
+    args = parser.parse_args()
+
+    skeleton_path = os.path.join(args.top_dir, "skeletons", "new_human.pickle")
     skelly = load_skeleton(skeleton_path)
     print(skelly)
-    data_path = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "data")
-    model1, pose3d = build_model(skelly, data_path)
-    solve_optimisation(model1, exe_path="C://Users//user-pc//anaconda3//pkgs//ipopt-3.11.1-2//Library//bin//ipopt.exe", project_dir=data_path, poses=pose3d)
+    data_path = os.path.join(args.top_dir, "data")
+    model1, pose3d = build_model(skelly, args.top_dir)
+    ipopt_path = "/opt/anaconda3/pkgs/ipopt-3.12.13-hfed70e2_1/bin/ipopt"
+    solve_optimisation(model1, exe_path=ipopt_path, project_dir=args.top_dir, poses=pose3d)
