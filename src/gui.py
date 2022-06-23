@@ -1,5 +1,7 @@
 from os import link
 import tkinter as tk
+from turtle import color
+import pan_compensation as pc
 from tkinter import font as tkfont
 from tkinter import filedialog, ttk
 import os
@@ -7,10 +9,12 @@ import time
 from pyomo.core.expr import current
 from calib import calib, app, extract, utils, plotting
 import get_points as pt
+import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import pickle
 import analyse as an
@@ -339,7 +343,7 @@ class PageTwo(tk.Frame):
         self.pack_propagate(False)
         self.current_frame = 0
 
-        f = Figure(figsize=(4,4), dpi=100)
+        f = plt.figure(figsize=(4,4), dpi=100)
         a = f.add_subplot(111, projection="3d")
         a.view_init(elev=20., azim=60)
 
@@ -363,8 +367,16 @@ class PageTwo(tk.Frame):
             """
             Replots canvas on the GUI with updated points
             """
-            a.set_xlim3d(-2, 2)
-            a.set_ylim3d(6, 8)
+            a.w_xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+            a.w_yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+            a.w_zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+
+            # Hide axes ticks
+            #a.set_xticks([])
+            #a.set_yticks([])
+            #a.set_zticks([])
+            a.set_xlim3d(4, 8)
+            a.set_ylim3d(0, 4)
             a.set_zlim3d(-2,2)
             canvas = FigureCanvasTkAgg(f, self)
             canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
@@ -372,7 +384,7 @@ class PageTwo(tk.Frame):
 
         def init():
             a.set_xlim3d(-1, 8)
-            a.set_ylim3d(6, 10)
+            a.set_ylim3d(26, 28)
             a.set_zlim3d(0,1)
             a.view_init(elev=20., azim=30)
         
@@ -387,16 +399,61 @@ class PageTwo(tk.Frame):
             currdir = os.getcwd()
             skel_name = (field_name1.get())
             skelly_dir = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "skeletons", ("new_human.pickle"))
-            results_dir = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "data", "results", ("traj_results.pickle"))
+            results_dir = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "data", "results", "cheetah_final", ("fte.pickle"))
 
             skel_dict = bd.load_skeleton(skelly_dir)
             results = an.load_pickle(results_dir)
             links = skel_dict["links"]
             markers = skel_dict["markers"]
 
+            links = [["chin", "forehead"], ["forehead", "neck"], 
+                ["neck", "shoulder1"], ["neck", "shoulder2"],
+                ["shoulder1", "hip1"], ["shoulder2", "hip2"],
+                ["shoulder1", "elbow1"], ["shoulder2", "elbow2"],
+                ["elbow1", "wrist1"], ["elbow2", "wrist2"],
+                ["hip1", "hip2"], ["hip1", "knee1"], ["hip2", "knee2"],
+                ["knee1", "ankle1"], ["knee2", "ankle2"]]
+            positions = {"chin": skel_dict["positions"]["chin"], "forehead": skel_dict["positions"]["forehead"], 
+                "neck": skel_dict["positions"]["neck"],
+                "shoulder1": skel_dict["positions"]["shoulder1"], "shoulder2": skel_dict["positions"]["shoulder2"],
+                "elbow1": skel_dict["positions"]["elbow1"], "elbow2": skel_dict["positions"]["elbow2"],
+                "hip1": skel_dict["positions"]["hip1"], "hip2": skel_dict["positions"]["hip2"],
+                "wrist1": skel_dict["positions"]["wrist1"], "wrist2": skel_dict["positions"]["wrist2"],
+                "knee1": skel_dict["positions"]["knee1"], "knee2": skel_dict["positions"]["knee2"],
+                "ankle1": skel_dict["positions"]["ankle1"], "ankle2": skel_dict["positions"]["ankle2"]}
+            dofs = {"chin": [1,1,1], "forehead": [0,0,0], "neck": [0,1,0], 
+                "shoulder1": [1,1,1], "shoulder2": [1,1,1],
+                "elbow1": [1,1,1], "elbow2": [1,1,1],
+                "wrist1": [0,0,0], "wrist2": [0,0,0],
+                "hip1": [1,1,1], "hip2": [1,1,1],
+                "knee1": [0,1,0], "knee2": [0,1,0],
+                "ankle1": [0,1,0], "ankle2": [0,1,0]}
+
+            markers = ["chin", "forehead", "neck", "shoulder1", "shoulder2",
+                "hip1", "hip2", "elbow1", "elbow2", "wrist1", "wrist2", "knee1", "knee2", "ankle1", "ankle2"]
+
+            enc_arr = an.load_pickle("C://Users//user-pc//Desktop//enc_vals.pickle")
+            
+            positions = results["positions"]
+            """
+            for frame in range(len(positions)):
+                for part in range(len(positions[frame])):
+                    xyz = [positions[frame][part][0], positions[frame][part][1], positions[frame][part][2]]
+                    enc_val = int(enc_arr[frame][1])
+                    rad_change = pc.count_to_rad(enc_val)
+                    new_xyz = pc.rotate_point(xyz, rad_change)
+                    positions[frame][part][0], positions[frame][part][1], positions[frame][part][2] = new_xyz[0], new_xyz[1], new_xyz[2]
+            """
             for i in range(len(markers)):
-                pose_dict[markers[i]] = [results["positions"][frame][i][0], results["positions"][frame][i][1], results["positions"][frame][i][2]]
-                a.scatter(results["positions"][frame][i][0], results["positions"][frame][i][1], results["positions"][frame][i][2])
+                enc_val = int(enc_arr[frame][1])
+                rad_change = pc.count_to_rad(enc_val)
+                point = [positions[frame][i][0], positions[frame][i][1], positions[frame][i][2]]
+                new_xyz = pc.rotate_point(point,rad_change)
+                print('Rotation: {} deg'.format(rad_change*180/np.pi))
+                new_xyz = point
+                pose_dict[markers[i]] = new_xyz
+                print(new_xyz)
+                a.scatter(new_xyz[0], new_xyz[1], new_xyz[2], color= "red")
             
             #print(pose_dict)
             
@@ -404,9 +461,10 @@ class PageTwo(tk.Frame):
                 if len(link)>1:
                     a.plot3D([pose_dict[link[0]][0], pose_dict[link[1]][0]],
                      [pose_dict[link[0]][1], pose_dict[link[1]][1]],
-                    [pose_dict[link[0]][2], pose_dict[link[1]][2]])
+                    [pose_dict[link[0]][2], pose_dict[link[1]][2]], color="black")
 
             update_canvas()
+            plt.savefig("C://Users//user-pc//Desktop//frames//img" + str(self.current_frame)+".jpg", dpi=100)
         
         def next_frame() -> None:
             """
