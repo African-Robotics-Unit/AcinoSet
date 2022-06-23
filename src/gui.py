@@ -367,6 +367,7 @@ class PageTwo(tk.Frame):
             """
             Replots canvas on the GUI with updated points
             """
+<<<<<<< HEAD
             a.w_xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
             a.w_yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
             a.w_zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
@@ -377,6 +378,10 @@ class PageTwo(tk.Frame):
             #a.set_zticks([])
             a.set_xlim3d(4, 8)
             a.set_ylim3d(0, 4)
+=======
+            a.set_xlim3d(-2, 2)
+            a.set_ylim3d(5, 9)
+>>>>>>> 5e59a700d6082e6bf4101a56e12d5368ff8ac4db
             a.set_zlim3d(-2,2)
             canvas = FigureCanvasTkAgg(f, self)
             canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
@@ -398,8 +403,13 @@ class PageTwo(tk.Frame):
             pose_dict = {}
             currdir = os.getcwd()
             skel_name = (field_name1.get())
+<<<<<<< HEAD
             skelly_dir = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "skeletons", ("new_human.pickle"))
             results_dir = os.path.join("C://Users//user-pc//Documents//Scripts//amaan", "data", "results", "cheetah_final", ("fte.pickle"))
+=======
+            skelly_dir = os.path.join("/Users/user/Documents/Scripts/amaan_acino/AcinoSet", "skeletons", ("new_human.pickle"))
+            results_dir = os.path.join("/Users/user/Documents/Scripts/amaan_acino/AcinoSet", "data", "results", ("traj_results.pickle"))
+>>>>>>> 5e59a700d6082e6bf4101a56e12d5368ff8ac4db
 
             skel_dict = bd.load_skeleton(skelly_dir)
             results = an.load_pickle(results_dir)
