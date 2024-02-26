@@ -1,5 +1,0 @@
-## nptyping needs to be v1.0.1 for 'Array' class. Later versions use 'NDArray'
-## data/2019_03_09/lily/run for DATA_DIR path needs to be manually downloaded from GitHub
-## also 'extrinsic_calib' (download manually).
-## environment missing 'opencv' and 'tables', needed to install those dependencies
-## had to downgrade ipopt to version 3.11.1 

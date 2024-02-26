@@ -99,3 +99,9 @@ python all_optimizations.py --data_dir 2019_03_09/lily/run --start_frame 70 --en
 ```
 
 **NB**: When running the FTE, we recommend that you use the MA86 solver. For details on how to set this up, see [these instructions](https://github.com/African-Robotics-Unit/docs/blob/main/linear-solvers.md).
+
+### Notes on packages and issues you may encounter, specifically in FTE.ipynb:
+nptyping needs to be v1.0.1 for 'Array' class. Later versions use 'NDArray'.
+data/2019_03_09/lily/run for DATA_DIR path needs to be manually downloaded from GitHub/OneDrive, and 'extrinsic_calib'.
+acinoset conda environment missing 'opencv' and 'tables', need to manually install those dependencies
+May need to downgrade ipopt to v3.11.1 if encountering an error related to ipopt.exe not being found.
