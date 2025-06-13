@@ -1,0 +1,74 @@
+# # === Build Anaconda Environment ===
+# FROM continuumio/miniconda3 as conda-stage
+
+# # init
+# RUN apt-get update && apt-get upgrade -y
+# RUN conda update -n base -c defaults conda -y
+
+# # prepare
+# RUN apt-get install -y python3-opengl
+
+# # WORKDIR /tmp
+# COPY conda_envs/acinoset.yml /tmp/environment.yml
+# RUN conda env create -f /tmp/environment.yml
+# # Pull the environment name out of the environment.yml
+# RUN echo "source activate $(head -1 /tmp/environment.yml | cut -d' ' -f2)" > ~/.bashrc
+# ENV PATH /opt/conda/envs/$(head -1 /tmp/environment.yml | cut -d' ' -f2)/bin:$PATH
+
+
+# === Deploy ===
+FROM dorowu/ubuntu-desktop-lxde-vnc
+
+# init
+RUN apt-get update && apt-get upgrade -y
+
+# time zone
+ENV TZ=Asia/Tokyo
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# pip
+RUN apt-get install -y python3-pip python3-tk
+RUN pip3 install -U pip
+
+# python libraries
+RUN apt-get install -y libhdf5-dev
+RUN pip3 install tqdm
+RUN pip3 install numpy
+RUN pip3 install scipy
+RUN pip3 install sympy
+RUN pip3 install pandas
+RUN pip3 install pyopengl
+RUN pip3 install jupyterlab
+RUN pip3 install pyqtgraph==0.11.0
+RUN pip3 install pyomo
+RUN pip3 install pyqt5
+RUN pip3 install tables
+RUN pip3 install nptyping==0.3.1
+
+# OpenCV
+RUN apt-get install -y python3-opencv
+
+# OpneGL
+RUN apt-get install -y python3-opengl
+
+# matplotlib
+RUN apt-get install -y python3-matplotlib
+
+# === IPOPT ===
+RUN apt-get install -y gcc g++ gfortran git patch wget pkg-config liblapack-dev libmetis-dev git
+# RUN locale-gen "en_US.UTF-8"
+
+# coinbrew
+WORKDIR /tmp
+RUN wget https://raw.githubusercontent.com/coin-or/coinbrew/master/coinbrew
+RUN chmod u+x coinbrew
+RUN ./coinbrew fetch Ipopt --no-prompt
+
+# HSL
+COPY coinhsl/coinhsl-2015.06.23.tar.gz .
+RUN tar -xvzf coinhsl-2015.06.23.tar.gz
+RUN mv coinhsl-2015.06.23 ThirdParty/HSL/coinhsl
+
+# buil IPOPT
+RUN ./coinbrew build Ipopt --prefix=build --test --no-prompt --verbosity=3
+ENV LD_LIBRARY_PATH=/tmp/build/lib
